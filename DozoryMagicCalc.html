@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Калькулятор Магии Стихий | Дозоры</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Arial', sans-serif;
+            background: #1e1e2f;
+            color: #fff;
+            padding: 20px;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .calculator {
+            max-width: 500px;
+            width: 100%;
+            background: #2c2c44;
+            padding: 25px;
+            border-radius: 20px;
+            box-shadow: 0 0 30px rgba(0,0,0,0.7);
+        }
+        h2 {
+            text-align: center;
+            margin-top: 0;
+            margin-bottom: 20px;
+            color: #d2c4ff;
+            font-size: 26px;
+        }
+        label {
+            display: block;
+            margin-top: 18px;
+            font-weight: 600;
+            color: #cfc7ff;
+        }
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 12px;
+            background: #3a3a5a;
+            padding: 10px 14px;
+            border-radius: 12px;
+            border: 1px solid #5a5a8a;
+            cursor: pointer;
+        }
+        .checkbox-label input {
+            width: 18px;
+            height: 18px;
+            margin: 0;
+            accent-color: #6c5ce7;
+        }
+        select, input[type=number] {
+            width: 100%;
+            padding: 10px 14px;
+            margin-top: 6px;
+            border-radius: 12px;
+            border: none;
+            background: #3a3a5c;
+            color: #fff;
+            font-size: 16px;
+            border: 1px solid #5a5a8a;
+        }
+        input:disabled {
+            opacity: 0.6;
+            background: #2a2a44;
+            cursor: not-allowed;
+        }
+        .ap-buttons {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+            flex-wrap: wrap;
+        }
+        .ap-btn {
+            flex: 1 0 45px;
+            background: #3a3a5c;
+            border: 2px solid #5a5a8a;
+            color: #ddd;
+            padding: 12px 0;
+            border-radius: 14px;
+            font-size: 20px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.15s;
+            box-shadow: 0 2px 0 #1e1e2f;
+        }
+        .ap-btn.active {
+            background: linear-gradient(145deg, #7b6cd4, #5a4bcf);
+            border-color: #ffd966;
+            color: white;
+            box-shadow: 0 0 12px rgba(255, 220, 100, 0.6);
+        }
+        .radio-group {
+            display: flex;
+            gap: 25px;
+            margin-top: 10px;
+            background: #3a3a5a;
+            padding: 12px 16px;
+            border-radius: 16px;
+        }
+        .radio-group label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin: 0;
+            font-weight: normal;
+            color: #e0e0ff;
+            cursor: pointer;
+        }
+        /* СВЕЧЕНИЕ ДЛЯ ЭНЕРГИИ */
+        .energy-glow {
+            margin-top: 20px;
+            font-size: 22px;
+            text-align: center;
+            font-weight: bold;
+            background: #23233a;
+            padding: 16px;
+            border-radius: 16px;
+            border-left: 6px solid #6c5ce7;
+            word-break: break-word;
+            box-shadow: 0 0 20px #6c5ce7, 0 0 40px rgba(108, 92, 231, 0.4);
+            text-shadow: 0 0 8px #a29bfe;
+            transition: box-shadow 0.2s;
+        }
+        .damage-panel {
+            background: #1e1e2f;
+            border-radius: 20px;
+            padding: 20px;
+            margin: 25px 0 15px;
+            text-align: center;
+            border: 2px solid #5a4bcf;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+        }
+        .damage-value {
+            font-size: 36px;
+            font-weight: 800;
+            color: #a5ff9a;
+            line-height: 1.2;
+            text-shadow: 0 0 8px #00aa88;
+        }
+        .damage-desc {
+            font-size: 15px;
+            color: #b8b8ff;
+            margin-top: 6px;
+        }
+        /* СТИЛЬ ДЛЯ КРИТИЧЕСКОГО УРОНА */
+        .crit-value {
+            font-size: 18px;
+            font-weight: bold;
+            color: #ffcc80;
+            margin-top: 8px;
+            text-shadow: 0 0 6px #ff9900;
+            letter-spacing: 1px;
+        }
+        .breakdown {
+            font-size: 14px;
+            color: #aaaad0;
+            text-align: center;
+            margin-top: 8px;
+            background: #2a2a42;
+            padding: 8px;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="calculator">
+        <h2>✨ КАЛЬКУЛЯТОР МАГИИ ✨</h2>
+        
+        <!-- ОЧКИ ДЕЙСТВИЯ — КНОПКИ -->
+        <label>⚡ Очки действия (ОД):</label>
+        <div class="ap-buttons" id="apButtons"></div>
+
+        <!-- ЧЕКБОКС УТРУЖДЁН -->
+        <label class="checkbox-label">
+            <input type="checkbox" id="tired"> 
+            <span style="font-size: 1.1rem;">😓 «Утруждён»</span>
+        </label>
+
+        <!-- СЛОЙ -->
+        <label>🌀 Слой:</label>
+        <select id="layer">
+            <option value="0">Реальность</option>
+            <option value="1">1 слой</option>
+            <option value="1.2">2 слой</option>
+            <option value="1.4">3 слой</option>
+            <option value="1.7">4 слой</option>
+            <option value="2">5 слой</option>
+        </select>
+
+        <!-- ТИП АТАКИ -->
+        <label>⚔️ Тип атаки:</label>
+        <div class="radio-group" id="attackTypeGroup">
+            <label>
+                <input type="radio" name="attackType" value="single" checked> 🎯 Один
+            </label>
+            <label>
+                <input type="radio" name="attackType" value="group"> 👥 Группа
+            </label>
+        </div>
+
+        <!-- КОЛИЧЕСТВО ЦЕЛЕЙ -->
+        <label>👥 Количество целей (врагов):</label>
+        <input type="number" id="targets" min="1" value="1" step="1" disabled>
+
+        <!-- ЭНЕРГИЯ — СВЕРХУ СО СВЕЧЕНИЕМ -->
+        <div id="energyResult" class="energy-glow">⚡ Энергия: 10</div>
+        <div id="energyBreakdown" class="breakdown">1 ОД ×10</div>
+
+        <!-- ПАНЕЛЬ УРОНА — С КРИТОМ -->
+        <div class="damage-panel">
+            <div id="damageMain" class="damage-value">20</div>
+            <div id="damageDetail" class="damage-desc">🎯 Урон по одной цели</div>
+            <div id="critValue" class="crit-value">💥 Крит: 40</div>
+        </div>
+    </div>
+
+    <script>
+        // --- ТАБЛИЦЫ УРОНА (ОД → урон) ---
+        const SINGLE_DMG = {1:20, 2:55, 3:90, 4:125, 5:175, 6:240};
+        const GROUP_DMG  = {1:20, 2:55, 3:90, 4:125, 5:155, 6:175};
+
+        // --- ТЕКУЩЕЕ ЗНАЧЕНИЕ ОД ---
+        let currentAP = 1;
+
+        // --- ЭЛЕМЕНТЫ ---
+        const apButtonsDiv = document.getElementById('apButtons');
+        const tiredCheck = document.getElementById('tired');
+        const layerSelect = document.getElementById('layer');
+        const targetsInput = document.getElementById('targets');
+        const attackRadios = document.getElementsByName('attackType');
+        const damageMain = document.getElementById('damageMain');
+        const damageDetail = document.getElementById('damageDetail');
+        const critValue = document.getElementById('critValue');
+        const energyResult = document.getElementById('energyResult');
+        const energyBreakdown = document.getElementById('energyBreakdown');
+
+        // --- СОЗДАНИЕ КНОПОК ОД ---
+        function createAPButtons() {
+            for (let i = 1; i <= 6; i++) {
+                const btn = document.createElement('button');
+                btn.className = 'ap-btn' + (i === 1 ? ' active' : '');
+                btn.textContent = i;
+                btn.dataset.ap = i;
+                btn.addEventListener('click', function() {
+                    document.querySelectorAll('.ap-btn').forEach(b => b.classList.remove('active'));
+                    this.classList.add('active');
+                    currentAP = i;
+                    updateAll();
+                });
+                apButtonsDiv.appendChild(btn);
+            }
+        }
+
+        function getCurrentAP() {
+            return currentAP;
+        }
+
+        function isGroupSelected() {
+            for (let radio of attackRadios) {
+                if (radio.checked) return radio.value === 'group';
+            }
+            return false;
+        }
+
+        function toggleTargetsField() {
+            const group = isGroupSelected();
+            targetsInput.disabled = !group;
+            if (group) {
+                targetsInput.min = 2;
+                if (parseInt(targetsInput.value) < 2) {
+                    targetsInput.value = 2;
+                }
+            } else {
+                targetsInput.min = 1;
+                targetsInput.value = 1;
+            }
+        }
+
+        function getTargets() {
+            if (!isGroupSelected()) return 1;
+            let t = parseInt(targetsInput.value);
+            if (isNaN(t) || t < 2) t = 2;
+            return t;
+        }
+
+        function updateDamage() {
+            const ap = getCurrentAP();
+            const targets = getTargets();
+            const group = isGroupSelected();
+
+            let dmg, desc;
+            if (!group) {
+                dmg = SINGLE_DMG[ap] || 0;
+                desc = '🎯 Урон по одной цели';
+            } else {
+                dmg = GROUP_DMG[ap] || 0;
+                desc = `👥 Урон по каждой цели`;
+            }
+            damageMain.innerText = dmg;
+            damageDetail.innerText = desc;
+            // Критический урон = обычный × 2
+            critValue.innerText = `💥 Крит: ${dmg * 2}`;
+        }
+
+        function updateEnergy() {
+            let ap = getCurrentAP();
+            let tired = tiredCheck.checked;
+            let layer = parseFloat(layerSelect.value);
+            if (isNaN(layer)) layer = 0;
+            let targets = getTargets();
+
+            let energy = ap * 10;
+            if (tired) energy *= 2;
+            if (layer !== 0) energy = Math.floor(energy * layer);
+            energy *= targets;
+
+            energyResult.innerHTML = `⚡ Энергия: ${energy}`;
+
+            let breakdown = `${ap} ОД ×10`;
+            if (tired) breakdown += ' ×2 (утруждён)';
+            if (layer !== 0) breakdown += ` ×${layer} (слой)`;
+            if (targets > 1) breakdown += ` ×${targets} (цели)`;
+            energyBreakdown.innerText = breakdown;
+        }
+
+        function updateAll() {
+            toggleTargetsField();
+            updateDamage();
+            updateEnergy();
+        }
+
+        // --- ПОДПИСКА НА СОБЫТИЯ ---
+        tiredCheck.addEventListener('change', updateAll);
+        layerSelect.addEventListener('change', updateAll);
+        targetsInput.addEventListener('input', updateAll);
+        for (let radio of attackRadios) {
+            radio.addEventListener('change', updateAll);
+        }
+
+        // --- СТАРТ ---
+        createAPButtons();
+        updateAll();
+    </script>
+</body>
+</html>
