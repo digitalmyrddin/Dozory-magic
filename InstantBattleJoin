@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Дозоры — Мгновенный вход в бой
 // @namespace    http://dozory.ru/
-// @version      1.0
+// @version      2.0
 // @description  Мгновенный вход в бой по клику без подтверждения (атака/защита/свет/тьма)
 // @author       GM Script
 // @include      http://dozory.ru/*
@@ -42,30 +42,110 @@
     ].join('');
     document.head.appendChild(st);
 
-    // ─── Функция мгновенного входа ─────────────────────────────────────────
+    // ─── Фоновый вход в бой ────────────────────────────────────────────────
+    // Принцип:
+    //  1. Снимаем снапшот DOM фрейма action
+    //  2. Патчим XMLHttpRequest в этом фрейме — перехватываем запрос sendActions
+    //  3. Вызываем addTarget + Otake + sendActions
+    //  4. Перехваченный запрос уходит фоново через fetch (credentials: include)
+    //  5. Восстанавливаем DOM фрейма — пользователь ничего не замечает
+
     function joinBattle(d) {
+      var aWin; // окно фрейма action
       try {
-        var act = window.top.action;
-        act.addTarget(d.id, d.side, d.n1, d.n2);
-        act.Otake();
+        aWin = window.top.frames['action'];
+        if (!aWin) aWin = window.top.action;
+      } catch(e) {
+        alert('Нет доступа к фрейму action:\n' + e.message);
+        return;
+      }
+
+      // ── 1. Снапшот DOM ──────────────────────────────────────────────────
+      var snap = aWin.document.body
+        ? aWin.document.body.innerHTML
+        : null;
+
+      // ── 2. Патч XMLHttpRequest ──────────────────────────────────────────
+      var OrigXHR   = aWin.XMLHttpRequest;
+      var origOpen  = OrigXHR.prototype.open;
+      var origSend  = OrigXHR.prototype.send;
+      var origSetRH = OrigXHR.prototype.setRequestHeader;
+
+      // Для каждого XHR объекта храним накопленные заголовки
+      OrigXHR.prototype.open = function(method, url /*, async*/) {
+        this._doz_method  = method;
+        this._doz_url     = url;
+        this._doz_headers = {};
+        this._doz_hooked  = true;
+        // НЕ вызываем origOpen — не открываем соединение в оригинальном объекте
+      };
+
+      OrigXHR.prototype.setRequestHeader = function(name, value) {
+        if (this._doz_hooked) {
+          this._doz_headers[name] = value;
+        } else {
+          origSetRH.call(this, name, value);
+        }
+      };
+
+      OrigXHR.prototype.send = function(body) {
+        if (this._doz_hooked) {
+          // ── Восстанавливаем патч ────────────────────────────────────────
+          OrigXHR.prototype.open           = origOpen;
+          OrigXHR.prototype.send           = origSend;
+          OrigXHR.prototype.setRequestHeader = origSetRH;
+
+          // ── Фоновый fetch ───────────────────────────────────────────────
+          var url     = this._doz_url;
+          var method  = this._doz_method || 'POST';
+          var headers = this._doz_headers || {};
+          if (!headers['Content-Type']) {
+            headers['Content-Type'] = 'application/x-www-form-urlencoded';
+          }
+
+          fetch(url, {
+            method:      method,
+            headers:     headers,
+            body:        body,
+            credentials: 'include'   // передаём куки сессии
+          }).catch(function() { /* тихо */ });
+
+          // ── 5. Восстанавливаем DOM ──────────────────────────────────────
+          if (snap !== null) {
+            aWin.document.body.innerHTML = snap;
+          }
+
+        } else {
+          origSend.call(this, body);
+        }
+      };
+
+      // ── 3–4. Вызываем оригинальный механизм (XHR перехватится) ─────────
+      try {
+        aWin.addTarget(d.id, d.side, d.n1, d.n2);
+        aWin.Otake();
         setTimeout(function () {
           try {
-            if (typeof window.top.action.sendActions === 'function') {
-              window.top.action.sendActions(0);
-            } else if (typeof window.top.frames['action'].sendActions === 'function') {
-              window.top.frames['action'].sendActions(0);
+            // sendActions триггерит перехваченный XHR
+            if (typeof aWin.sendActions === 'function') {
+              aWin.sendActions(0);
             } else {
-              var actionDoc = window.top.frames['action'].document;
-              var applyBtn = actionDoc.querySelector('img[src*="apply"]');
-              if (applyBtn) {
-                applyBtn.click();
-              } else {
-                window.top.frames['action'].eval('sendActions(0)');
-              }
+              // Фоллбэк: кликаем кнопку Применить (она тоже будет перехвачена)
+              var applyBtn = aWin.document.querySelector('img[src*="apply"]');
+              if (applyBtn) applyBtn.click();
             }
-          } catch(e2) { /* тихо */ }
-        }, 150);
+          } catch(e2) {
+            // Снимаем патч если что-то пошло не так
+            OrigXHR.prototype.open           = origOpen;
+            OrigXHR.prototype.send           = origSend;
+            OrigXHR.prototype.setRequestHeader = origSetRH;
+          }
+        }, 100);
       } catch(e) {
+        // Снимаем патч
+        OrigXHR.prototype.open           = origOpen;
+        OrigXHR.prototype.send           = origSend;
+        OrigXHR.prototype.setRequestHeader = origSetRH;
         alert('Ошибка входа в бой:\n' + e.message);
       }
     }
