@@ -17,7 +17,7 @@
   // ─── Запускаемся ТОЛЬКО если на странице есть хоть одна Otake-ссылка ─────
   // Это вместо ненадёжной проверки window.name
   function hasOtakeLinks() {
-    return document.querySelector('a[onclick*="Otake"]') !== null;
+    return document.querySelector('[onclick*="Otake"]') !== null;
   }
 
   if (!hasOtakeLinks()) {
@@ -148,26 +148,32 @@
       return { id: m[1], side: m[2], n1: +m[3], n2: +m[4] };
     }
 
-    // ─── Перехват ссылок ───────────────────────────────────────────────────
-    function intercept(a) {
-      if (a.dataset.doz) return;               // уже обработан
-      var oc = a.getAttribute('onclick') || '';
-      if (oc.indexOf('Otake') === -1) return;  // не наш
+    // ─── Перехват элементов (a, b, span, td — любых с Otake) ──────────────
+    function intercept(el) {
+      if (el.dataset.doz) return;               // уже обработан
+      var oc = el.getAttribute('onclick') || '';
+      if (oc.indexOf('Otake') === -1) return;   // не наш
 
       var parsed = parse(oc);
       if (!parsed) return;
 
-      // Заголовок из родительского span[title]
-      var span = a.parentElement;
-      while (span && span.tagName !== 'SPAN') span = span.parentElement;
-      parsed.title = (span && span.title) ? span.title : '';
+      // Ищем заголовок: span[title] или td[title] среди предков
+      parsed.title = '';
+      var cur = el.parentElement;
+      while (cur && cur.tagName !== 'TABLE') {
+        if ((cur.tagName === 'SPAN' || cur.tagName === 'TD') && cur.title) {
+          parsed.title = cur.title;
+          break;
+        }
+        cur = cur.parentElement;
+      }
 
-      a.dataset.doz = '1';
-      a.classList.add('doz-ok');
+      el.dataset.doz = '1';
+      el.classList.add('doz-ok');
 
       // Убираем оригинальный onclick и вешаем свой
-      a.setAttribute('onclick', 'return false;');
-      a.addEventListener('click', function (e) {
+      el.setAttribute('onclick', 'return false;');
+      el.addEventListener('click', function (e) {
         e.preventDefault();
         e.stopPropagation();
         show(parsed);
@@ -175,7 +181,8 @@
     }
 
     function scanAll() {
-      document.querySelectorAll('a[onclick*="Otake"]').forEach(intercept);
+      // Ловим ВСЕ элементы с Otake: <a> (атака/защита), <b> (Свет/Тьма), и любые другие
+      document.querySelectorAll('[onclick*="Otake"]').forEach(intercept);
     }
 
     // Первый прогон
