@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Дозоры — Рекаст
 // @namespace    http://dozory.ru/
-// @version      3.3
+// @version      3.4
 // @description  Кнопка «Рекаст» — повтор последнего «Применить» или атаки. F2.
 // @author       GM Script
 // @include      http://game.dozory.ru/cgi-bin/main.cgi*
@@ -19,16 +19,21 @@
 
   if (window.name !== 'action') return;
 
-  function getActsSel()  { try { return window.parent.acts_sel; }       catch(e) { return undefined; } }
-  function getSnapshot() { try { return window.parent._dozSnapshot || null; } catch(e) { return null; } }
-  function setSnapshot(a){ try { window.parent._dozSnapshot = a; }      catch(e) {} }
-
-  // Снапшот для doAction (атаки, дуэли и т.д.)
-  // Формат: { type: 'doAction', actionType: 3, targetId: 1976563 }
+  function getActsSel()      { try { return window.parent.acts_sel; }           catch(e) { return undefined; } }
+  function getSnapshot()     { try { return window.parent._dozSnapshot || null; } catch(e) { return null; } }
+  function setSnapshot(a)    { try { window.parent._dozSnapshot = a; }          catch(e) {} }
   function getDoActionSnap() { try { return window.parent._dozDoAction || null; } catch(e) { return null; } }
-  function setDoActionSnap(s){ try { window.parent._dozDoAction = s; }  catch(e) {} }
+  function setDoActionSnap(s){ try { window.parent._dozDoAction = s; }          catch(e) {} }
 
-  // ─── Хук sendActions — для заклинаний / обычных действий ──────────────────
+  // Текущая локация — извлекаем из URL фрейма
+  function getCurrentLoc() {
+    try {
+      var m = window.location.href.match(/[?&]loc=(\d+)/);
+      return m ? m[1] : null;
+    } catch(e) { return null; }
+  }
+
+  // ─── Хук sendActions ──────────────────────────────────────────────────────
   function hookSendActions() {
     if (typeof window.sendActions !== 'function') return;
     if (window._dozHooked) return;
@@ -39,8 +44,11 @@
         try {
           var sel = getActsSel();
           if (sel && sel.length > 0) {
-            // Сохраняем acts_sel и сбрасываем doAction-снапшот
-            setSnapshot(sel.map(function(a){ return a ? a.slice() : a; }));
+            // Сохраняем вместе с текущей локацией
+            setSnapshot({
+              acts: sel.map(function(a){ return a ? a.slice() : a; }),
+              loc:  getCurrentLoc()
+            });
             setDoActionSnap(null);
             updateBtn();
           }
@@ -50,26 +58,37 @@
     };
   }
 
-  // ─── Хук doAction — для атак, дуэлей и прочих действий на игроков ─────────
-  // doAction(actionType, targetId) — вызывается из тултипа при клике на "Напасть" и т.д.
-  function hookDoAction() {
-    if (typeof window.doAction !== 'function') return;
-    if (window._dozDoActionHooked) return;
-    window._dozDoActionHooked = true;
-    var orig = window.doAction;
-    window.doAction = function(actionType, targetId) {
-      try {
-        // Сохраняем параметры и сбрасываем acts_sel снапшот
-        setDoActionSnap({ actionType: actionType, targetId: targetId });
-        setSnapshot(null);
-        updateBtn();
-      } catch(e) {}
-      return orig.apply(this, arguments);
-    };
+  // ─── Хук doAction — перехватываем во всех фреймах ─────────────────────────
+  // doAction может жить в action-фрейме или в competitors/dusk
+  function hookDoActionIn(win) {
+    try {
+      if (!win || typeof win.doAction !== 'function') return;
+      if (win._dozDoActionHooked) return;
+      win._dozDoActionHooked = true;
+      var orig = win.doAction;
+      win.doAction = function(actionType, targetId) {
+        try {
+          setDoActionSnap({ actionType: actionType, targetId: targetId });
+          setSnapshot(null);
+          updateBtn();
+        } catch(e) {}
+        return orig.apply(this, arguments);
+      };
+    } catch(e) {}
+  }
+
+  function hookDoActionAll() {
+    hookDoActionIn(window);
+    // Также в соседних фреймах где может жить тултип
+    ['competitors','dusk','action','chat_main'].forEach(function(n) {
+      try { hookDoActionIn(window.top.frames[n]); } catch(e) {}
+    });
+    // И в родителе
+    try { hookDoActionIn(window.parent); } catch(e) {}
   }
 
   hookSendActions();
-  hookDoAction();
+  hookDoActionAll();
 
   // ─── Рекаст ───────────────────────────────────────────────────────────────
   function recast() {
@@ -77,25 +96,59 @@
     var snap   = getSnapshot();
 
     if (daSnap) {
-      // Повтор атаки / дуэли
+      // Атака / дуэль — не зависит от локации
       flashBtn();
       try {
-        if (typeof window.doAction === 'function') {
-          window.doAction(daSnap.actionType, daSnap.targetId);
-        }
+        // Ищем doAction в доступных фреймах
+        var fn = null;
+        ['competitors','dusk','action'].forEach(function(n) {
+          try { if (!fn && typeof window.top.frames[n].doAction === 'function') fn = window.top.frames[n].doAction; } catch(e) {}
+        });
+        if (!fn && typeof window.doAction === 'function') fn = window.doAction;
+        if (!fn && typeof window.parent.doAction === 'function') fn = window.parent.doAction;
+        if (fn) fn(daSnap.actionType, daSnap.targetId);
       } catch(e) {}
       return;
     }
 
-    if (snap && snap.length > 0) {
-      // Повтор заклинаний / обычных действий
+    if (snap && snap.acts && snap.acts.length > 0) {
+      // Заклинания — проверяем что мы в той же локации
+      var curLoc = getCurrentLoc();
+      if (snap.loc && curLoc && snap.loc !== curLoc) {
+        // Локация сменилась — снапшот устарел, сбрасываем
+        setSnapshot(null);
+        updateBtn();
+        return;
+      }
       flashBtn();
       try {
-        window.parent.acts_sel = snap.map(function(a){ return a ? a.slice() : a; });
+        window.parent.acts_sel = snap.acts.map(function(a){ return a ? a.slice() : a; });
         window.sendActions(0);
       } catch(e) {}
       return;
     }
+  }
+
+  // ─── Сброс снапшота при смене локации ─────────────────────────────────────
+  // Фрейм action перезагружается при каждом ходе и переходе.
+  // Если URL сменился на другую локацию — сбрасываем снапшот заклинаний.
+  window.addEventListener('load', function() {
+    var snap = getSnapshot();
+    if (snap && snap.loc) {
+      var curLoc = getCurrentLoc();
+      if (curLoc && snap.loc !== curLoc) {
+        setSnapshot(null);
+      }
+    }
+    setTimeout(function() {
+      hookSendActions();
+      hookDoActionAll();
+      injectBtn();
+    }, 200);
+  });
+
+  if (document.readyState === 'complete') {
+    setTimeout(function() { hookSendActions(); hookDoActionAll(); injectBtn(); }, 200);
   }
 
   // ─── Кнопка ───────────────────────────────────────────────────────────────
@@ -127,7 +180,6 @@
         '#doz-rec-btn:active { background:linear-gradient(to bottom,#1a2a5a 0%,#2a3a6a 100%); box-shadow:inset 0 2px 3px rgba(0,0,0,.4); }',
         '#doz-rec-btn.flash { background:linear-gradient(to bottom,#8a9aca 0%,#4a5a9a 100%); }',
         '#doz-rec-btn.noact { opacity:.35; cursor:default; background:linear-gradient(to bottom,#555 0%,#333 100%); }',
-        /* Оранжевый бейдж для атак, красный для заклинаний */
         '#doz-rec-badge {',
         '  position:absolute; top:-5px; right:-6px;',
         '  color:#fff; font:bold 8px Arial; border-radius:6px;',
@@ -142,7 +194,6 @@
 
     var applyImg = document.querySelector('img[src*="apply"]');
     if (!applyImg) return;
-
     var tr = applyImg;
     while (tr && tr.tagName !== 'TR') tr = tr.parentElement;
     if (!tr) return;
@@ -159,7 +210,6 @@
 
     badgeEl = document.createElement('span');
     badgeEl.id = 'doz-rec-badge';
-
     btnEl.appendChild(badgeEl);
     td.appendChild(btnEl);
     tr.appendChild(td);
@@ -175,23 +225,22 @@
     var snap   = getSnapshot();
 
     if (daSnap) {
-      // Атака — оранжевый бейдж, показываем "⚔"
       btnEl.className = '';
-      btnEl.title = 'Рекаст: повторить атаку на игрока ' + daSnap.targetId + ' [' + HOTKEY + ']';
-      if (badgeEl) {
-        badgeEl.textContent = '⚔';
-        badgeEl.className = 'attack';
-        badgeEl.style.display = 'inline-block';
-      }
-    } else if (snap && snap.length > 0) {
-      // Заклинания — красный бейдж с количеством
-      btnEl.className = '';
-      var n = snap.length;
-      btnEl.title = 'Рекаст: повторить ' + n + ' действ. [' + HOTKEY + ']';
-      if (badgeEl) {
-        badgeEl.textContent = n;
-        badgeEl.className = 'spell';
-        badgeEl.style.display = 'inline-block';
+      btnEl.title = 'Рекаст: повторить атаку [' + HOTKEY + ']';
+      if (badgeEl) { badgeEl.textContent = '⚔'; badgeEl.className = 'attack'; badgeEl.style.display = 'inline-block'; }
+    } else if (snap && snap.acts && snap.acts.length > 0) {
+      // Проверяем актуальность локации
+      var curLoc = getCurrentLoc();
+      if (snap.loc && curLoc && snap.loc !== curLoc) {
+        // Устарело
+        btnEl.className = 'noact';
+        btnEl.title = 'Рекаст: смените локацию — нужно применить снова [' + HOTKEY + ']';
+        if (badgeEl) badgeEl.style.display = 'none';
+      } else {
+        btnEl.className = '';
+        var n = snap.acts.length;
+        btnEl.title = 'Рекаст: повторить ' + n + ' действ. [' + HOTKEY + ']';
+        if (badgeEl) { badgeEl.textContent = n; badgeEl.className = 'spell'; badgeEl.style.display = 'inline-block'; }
       }
     } else {
       btnEl.className = 'noact';
@@ -204,14 +253,6 @@
     if (!btnEl) return;
     btnEl.classList.add('flash');
     setTimeout(function(){ if(btnEl) btnEl.classList.remove('flash'); }, 200);
-  }
-
-  // ─── Старт ────────────────────────────────────────────────────────────────
-  window.addEventListener('load', function() {
-    setTimeout(function() { hookSendActions(); hookDoAction(); injectBtn(); }, 200);
-  });
-  if (document.readyState === 'complete') {
-    setTimeout(function() { hookSendActions(); hookDoAction(); injectBtn(); }, 200);
   }
 
   // ─── Hotkey ───────────────────────────────────────────────────────────────
