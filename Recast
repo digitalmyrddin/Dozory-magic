@@ -148,10 +148,19 @@
   var btnEl   = null;
   var badgeEl = null;
 
+  // В бою фрейм action содержит блок «Союзники/Противники»
+  function isInCombat() {
+    try {
+      var t = document.body && document.body.textContent || '';
+      return t.indexOf('Союзники') !== -1 && t.indexOf('Противники') !== -1;
+    } catch(e) { return false; }
+  }
+
   function injectBtn() {
     var old = document.getElementById('doz-rec-td');
     if (old) old.parentNode.removeChild(old);
     if (!document.body) return;
+    if (isInCombat()) return; // в бою кнопку не показываем
 
     if (!document.getElementById('doz-rec-style')) {
       var st = document.createElement('style');
