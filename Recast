@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Дозоры — Рекаст
 // @namespace    http://dozory.ru/
-// @version      3.1
-// @description  Кнопка «Рекаст» — повтор последнего «Применить» (все действия). F2.
+// @version      3.3
+// @description  Кнопка «Рекаст» — повтор последнего «Применить» или атаки. F2.
 // @author       GM Script
 // @include      http://game.dozory.ru/cgi-bin/main.cgi*
 // @include      http://game.dozory.ru/*
@@ -19,11 +19,16 @@
 
   if (window.name !== 'action') return;
 
-  function getActsSel()  { try { return window.parent.acts_sel; }    catch(e) { return undefined; } }
+  function getActsSel()  { try { return window.parent.acts_sel; }       catch(e) { return undefined; } }
   function getSnapshot() { try { return window.parent._dozSnapshot || null; } catch(e) { return null; } }
-  function setSnapshot(a){ try { window.parent._dozSnapshot = a; }   catch(e) {} }
+  function setSnapshot(a){ try { window.parent._dozSnapshot = a; }      catch(e) {} }
 
-  // ─── Хук sendActions ──────────────────────────────────────────────────────
+  // Снапшот для doAction (атаки, дуэли и т.д.)
+  // Формат: { type: 'doAction', actionType: 3, targetId: 1976563 }
+  function getDoActionSnap() { try { return window.parent._dozDoAction || null; } catch(e) { return null; } }
+  function setDoActionSnap(s){ try { window.parent._dozDoAction = s; }  catch(e) {} }
+
+  // ─── Хук sendActions — для заклинаний / обычных действий ──────────────────
   function hookSendActions() {
     if (typeof window.sendActions !== 'function') return;
     if (window._dozHooked) return;
@@ -34,7 +39,9 @@
         try {
           var sel = getActsSel();
           if (sel && sel.length > 0) {
+            // Сохраняем acts_sel и сбрасываем doAction-снапшот
             setSnapshot(sel.map(function(a){ return a ? a.slice() : a; }));
+            setDoActionSnap(null);
             updateBtn();
           }
         } catch(e) {}
@@ -43,17 +50,52 @@
     };
   }
 
+  // ─── Хук doAction — для атак, дуэлей и прочих действий на игроков ─────────
+  // doAction(actionType, targetId) — вызывается из тултипа при клике на "Напасть" и т.д.
+  function hookDoAction() {
+    if (typeof window.doAction !== 'function') return;
+    if (window._dozDoActionHooked) return;
+    window._dozDoActionHooked = true;
+    var orig = window.doAction;
+    window.doAction = function(actionType, targetId) {
+      try {
+        // Сохраняем параметры и сбрасываем acts_sel снапшот
+        setDoActionSnap({ actionType: actionType, targetId: targetId });
+        setSnapshot(null);
+        updateBtn();
+      } catch(e) {}
+      return orig.apply(this, arguments);
+    };
+  }
+
   hookSendActions();
+  hookDoAction();
 
   // ─── Рекаст ───────────────────────────────────────────────────────────────
   function recast() {
-    var snap = getSnapshot();
-    if (!snap || snap.length === 0) return;
-    flashBtn();
-    try {
-      window.parent.acts_sel = snap.map(function(a){ return a ? a.slice() : a; });
-      window.sendActions(0);
-    } catch(e) {}
+    var daSnap = getDoActionSnap();
+    var snap   = getSnapshot();
+
+    if (daSnap) {
+      // Повтор атаки / дуэли
+      flashBtn();
+      try {
+        if (typeof window.doAction === 'function') {
+          window.doAction(daSnap.actionType, daSnap.targetId);
+        }
+      } catch(e) {}
+      return;
+    }
+
+    if (snap && snap.length > 0) {
+      // Повтор заклинаний / обычных действий
+      flashBtn();
+      try {
+        window.parent.acts_sel = snap.map(function(a){ return a ? a.slice() : a; });
+        window.sendActions(0);
+      } catch(e) {}
+      return;
+    }
   }
 
   // ─── Кнопка ───────────────────────────────────────────────────────────────
@@ -69,45 +111,31 @@
       var st = document.createElement('style');
       st.id = 'doz-rec-style';
       st.textContent = [
-        /* Кнопка в стиле игровых кнопок */
         '#doz-rec-btn {',
         '  display:inline-block; cursor:pointer; user-select:none;',
         '  vertical-align:middle; position:relative;',
         '  padding:3px 10px 3px 8px;',
         '  font:bold 8pt Arial,sans-serif; color:#e8e8ff;',
         '  background:linear-gradient(to bottom,#5a6a9a 0%,#2a3a6a 50%,#1a2a5a 100%);',
-        '  border:1px solid #1a2050;',
-        '  border-radius:3px;',
+        '  border:1px solid #1a2050; border-radius:3px;',
         '  box-shadow:inset 0 1px 0 rgba(255,255,255,.15),0 1px 2px rgba(0,0,0,.5);',
         '  text-shadow:0 -1px 0 rgba(0,0,0,.6);',
         '  white-space:nowrap;',
         '}',
-        '#doz-rec-btn::before {',
-        '  content:"»» ";',
-        '  color:#8899cc;',
-        '}',
-        '#doz-rec-btn:hover {',
-        '  background:linear-gradient(to bottom,#6a7aaa 0%,#3a4a7a 50%,#2a3a6a 100%);',
-        '}',
-        '#doz-rec-btn:active {',
-        '  background:linear-gradient(to bottom,#1a2a5a 0%,#2a3a6a 100%);',
-        '  box-shadow:inset 0 2px 3px rgba(0,0,0,.4);',
-        '}',
-        '#doz-rec-btn.flash {',
-        '  background:linear-gradient(to bottom,#8a9aca 0%,#4a5a9a 100%);',
-        '}',
-        '#doz-rec-btn.noact {',
-        '  opacity:.35; cursor:default;',
-        '  background:linear-gradient(to bottom,#555 0%,#333 100%);',
-        '}',
+        '#doz-rec-btn::before { content:"»» "; color:#8899cc; }',
+        '#doz-rec-btn:hover { background:linear-gradient(to bottom,#6a7aaa 0%,#3a4a7a 50%,#2a3a6a 100%); }',
+        '#doz-rec-btn:active { background:linear-gradient(to bottom,#1a2a5a 0%,#2a3a6a 100%); box-shadow:inset 0 2px 3px rgba(0,0,0,.4); }',
+        '#doz-rec-btn.flash { background:linear-gradient(to bottom,#8a9aca 0%,#4a5a9a 100%); }',
+        '#doz-rec-btn.noact { opacity:.35; cursor:default; background:linear-gradient(to bottom,#555 0%,#333 100%); }',
+        /* Оранжевый бейдж для атак, красный для заклинаний */
         '#doz-rec-badge {',
         '  position:absolute; top:-5px; right:-6px;',
-        '  background:#cc0000; color:#fff;',
-        '  font:bold 8px Arial; border-radius:6px;',
-        '  padding:0 3px; line-height:12px;',
-        '  border:1px solid #ff5555;',
+        '  color:#fff; font:bold 8px Arial; border-radius:6px;',
+        '  padding:0 3px; line-height:12px; border-width:1px; border-style:solid;',
         '  display:none;',
-        '}'
+        '}',
+        '#doz-rec-badge.spell  { background:#cc0000; border-color:#ff5555; }',
+        '#doz-rec-badge.attack { background:#cc6600; border-color:#ff9933; }'
       ].join('\n');
       document.head.appendChild(st);
     }
@@ -143,20 +171,32 @@
 
   function updateBtn() {
     if (!btnEl) return;
-    var snap = getSnapshot();
-    if (!snap || snap.length === 0) {
-      btnEl.className = 'noact';
-      btnEl.title = 'Рекаст: сначала нажмите «Применить» [' + HOTKEY + ']';
-      if (badgeEl) badgeEl.style.display = 'none';
-    } else {
+    var daSnap = getDoActionSnap();
+    var snap   = getSnapshot();
+
+    if (daSnap) {
+      // Атака — оранжевый бейдж, показываем "⚔"
+      btnEl.className = '';
+      btnEl.title = 'Рекаст: повторить атаку на игрока ' + daSnap.targetId + ' [' + HOTKEY + ']';
+      if (badgeEl) {
+        badgeEl.textContent = '⚔';
+        badgeEl.className = 'attack';
+        badgeEl.style.display = 'inline-block';
+      }
+    } else if (snap && snap.length > 0) {
+      // Заклинания — красный бейдж с количеством
       btnEl.className = '';
       var n = snap.length;
       btnEl.title = 'Рекаст: повторить ' + n + ' действ. [' + HOTKEY + ']';
       if (badgeEl) {
-        // Показываем бейдж всегда — даже для 1 действия
         badgeEl.textContent = n;
+        badgeEl.className = 'spell';
         badgeEl.style.display = 'inline-block';
       }
+    } else {
+      btnEl.className = 'noact';
+      btnEl.title = 'Рекаст: сначала нажмите «Применить» или «Напасть» [' + HOTKEY + ']';
+      if (badgeEl) badgeEl.style.display = 'none';
     }
   }
 
@@ -168,10 +208,10 @@
 
   // ─── Старт ────────────────────────────────────────────────────────────────
   window.addEventListener('load', function() {
-    setTimeout(function() { hookSendActions(); injectBtn(); }, 200);
+    setTimeout(function() { hookSendActions(); hookDoAction(); injectBtn(); }, 200);
   });
   if (document.readyState === 'complete') {
-    setTimeout(function() { hookSendActions(); injectBtn(); }, 200);
+    setTimeout(function() { hookSendActions(); hookDoAction(); injectBtn(); }, 200);
   }
 
   // ─── Hotkey ───────────────────────────────────────────────────────────────
