@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         Дозоры — Горячие клавиши действий
+// @name         Дозоры — Горячие клавиши заклинаний
 // @namespace    http://dozory.ru/
-// @version      3.1
-// @description  Настройка горячих клавиш для действий.
+// @version      4.0
+// @description  Горячие клавиши для заклинаний с автодополнением.
 // @author       GM Script
 // @include      http://game.dozory.ru/cgi-bin/main.cgi*
 // @include      http://game.dozory.ru/*
@@ -18,6 +18,13 @@
   if (window.name !== 'action') return;
 
   var RESERVED_KEYS = ['F2'];
+  // Добавляем клавиши из скрипта рефлекса чтобы не было конфликтов
+  (function() {
+    try {
+      var reflexKeys = JSON.parse(localStorage.getItem('doz_reflex_keys') || '{}');
+      Object.keys(reflexKeys).forEach(function(k){ if (RESERVED_KEYS.indexOf(k) === -1) RESERVED_KEYS.push(k); });
+    } catch(e) {}
+  })();
   var STORAGE_KEY   = 'doz_hotkeys_v2';
 
   function loadBindings() {
@@ -313,6 +320,11 @@
   }
 
   // ─── Назначение клавиши ───────────────────────────────────────────────────
+  document.addEventListener('keyup', function(e) {
+    if (!listeningEl) return;
+    e.preventDefault(); e.stopPropagation();
+  }, true);
+
   document.addEventListener('keydown', function(e) {
     if (!listeningEl) return;
     e.preventDefault(); e.stopPropagation();
@@ -390,8 +402,17 @@
   }
 
   // ─── Иконка ───────────────────────────────────────────────────────────────
+  // В бою фрейм action содержит блок «Союзники/Противники»
+  function isInCombat() {
+    try {
+      var t = document.body && document.body.textContent || '';
+      return t.indexOf('Союзники') !== -1 && t.indexOf('Противники') !== -1;
+    } catch(e) { return false; }
+  }
+
   function injectUI() {
     if (document.getElementById('doz-hk-open')) return;
+    if (isInCombat()) return; // в бою кнопку не показываем
     var applyImg = document.querySelector('img[src*="apply"]');
     if (!applyImg) return;
     var tr = applyImg;
