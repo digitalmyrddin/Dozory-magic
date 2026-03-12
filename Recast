@@ -19,18 +19,45 @@
 
   if (window.name !== 'action') return;
 
-  function getActsSel()      { try { return window.parent.acts_sel; }           catch(e) { return undefined; } }
+  function getActsSel()      { try { return window.parent.acts_sel; }             catch(e) { return undefined; } }
   function getSnapshot()     { try { return window.parent._dozSnapshot || null; } catch(e) { return null; } }
-  function setSnapshot(a)    { try { window.parent._dozSnapshot = a; }          catch(e) {} }
+  function setSnapshot(a)    { try { window.parent._dozSnapshot = a; }            catch(e) {} }
   function getDoActionSnap() { try { return window.parent._dozDoAction || null; } catch(e) { return null; } }
-  function setDoActionSnap(s){ try { window.parent._dozDoAction = s; }          catch(e) {} }
+  function setDoActionSnap(s){ try { window.parent._dozDoAction = s; }            catch(e) {} }
 
-  // Текущая локация — извлекаем из URL фрейма
-  function getCurrentLoc() {
-    try {
-      var m = window.location.href.match(/[?&]loc=(\d+)/);
-      return m ? m[1] : null;
-    } catch(e) { return null; }
+  // ─── Проверка актуальности снапшота ───────────────────────────────────────
+  // Извлекаем act-коды из снапшота и проверяем есть ли они в текущих пулах.
+  // acts_br/mg/ar/am: каждый элемент [название, ?, ?, act_code, ...]
+  // act_code обычно в a[3] или a[4]
+  function getAllActCodes() {
+    var codes = {};
+    ['acts_br','acts_mg','acts_ar','acts_am'].forEach(function(pool) {
+      try {
+        var arr = window[pool];
+        if (!Array.isArray(arr)) return;
+        arr.forEach(function(a) {
+          if (!a) return;
+          if (a[3]) codes[a[3]] = true;
+          if (a[4]) codes[a[4]] = true;
+        });
+      } catch(e) {}
+    });
+    return codes;
+  }
+
+  function isSnapshotValid(snap) {
+    if (!snap || !snap.acts || snap.acts.length === 0) return false;
+    var available = getAllActCodes();
+    // Если пулы ещё не загружены (пустые) — считаем снапшот валидным
+    if (Object.keys(available).length === 0) return true;
+    // Проверяем что хотя бы один act из снапшота есть в текущих пулах
+    for (var i = 0; i < snap.acts.length; i++) {
+      var a = snap.acts[i];
+      if (!a) continue;
+      var actCode = a[4]; // acts_sel хранит act_code в [4]
+      if (actCode && available[actCode]) return true;
+    }
+    return false;
   }
 
   // ─── Хук sendActions ──────────────────────────────────────────────────────
@@ -44,11 +71,7 @@
         try {
           var sel = getActsSel();
           if (sel && sel.length > 0) {
-            // Сохраняем вместе с текущей локацией
-            setSnapshot({
-              acts: sel.map(function(a){ return a ? a.slice() : a; }),
-              loc:  getCurrentLoc()
-            });
+            setSnapshot({ acts: sel.map(function(a){ return a ? a.slice() : a; }) });
             setDoActionSnap(null);
             updateBtn();
           }
@@ -58,8 +81,7 @@
     };
   }
 
-  // ─── Хук doAction — перехватываем во всех фреймах ─────────────────────────
-  // doAction может жить в action-фрейме или в competitors/dusk
+  // ─── Хук doAction — во всех фреймах ──────────────────────────────────────
   function hookDoActionIn(win) {
     try {
       if (!win || typeof win.doAction !== 'function') return;
@@ -79,11 +101,9 @@
 
   function hookDoActionAll() {
     hookDoActionIn(window);
-    // Также в соседних фреймах где может жить тултип
     ['competitors','dusk','action','chat_main'].forEach(function(n) {
       try { hookDoActionIn(window.top.frames[n]); } catch(e) {}
     });
-    // И в родителе
     try { hookDoActionIn(window.parent); } catch(e) {}
   }
 
@@ -96,10 +116,8 @@
     var snap   = getSnapshot();
 
     if (daSnap) {
-      // Атака / дуэль — не зависит от локации
       flashBtn();
       try {
-        // Ищем doAction в доступных фреймах
         var fn = null;
         ['competitors','dusk','action'].forEach(function(n) {
           try { if (!fn && typeof window.top.frames[n].doAction === 'function') fn = window.top.frames[n].doAction; } catch(e) {}
@@ -112,10 +130,8 @@
     }
 
     if (snap && snap.acts && snap.acts.length > 0) {
-      // Заклинания — проверяем что мы в той же локации
-      var curLoc = getCurrentLoc();
-      if (snap.loc && curLoc && snap.loc !== curLoc) {
-        // Локация сменилась — снапшот устарел, сбрасываем
+      if (!isSnapshotValid(snap)) {
+        // Снапшот устарел — сбрасываем
         setSnapshot(null);
         updateBtn();
         return;
@@ -125,30 +141,7 @@
         window.parent.acts_sel = snap.acts.map(function(a){ return a ? a.slice() : a; });
         window.sendActions(0);
       } catch(e) {}
-      return;
     }
-  }
-
-  // ─── Сброс снапшота при смене локации ─────────────────────────────────────
-  // Фрейм action перезагружается при каждом ходе и переходе.
-  // Если URL сменился на другую локацию — сбрасываем снапшот заклинаний.
-  window.addEventListener('load', function() {
-    var snap = getSnapshot();
-    if (snap && snap.loc) {
-      var curLoc = getCurrentLoc();
-      if (curLoc && snap.loc !== curLoc) {
-        setSnapshot(null);
-      }
-    }
-    setTimeout(function() {
-      hookSendActions();
-      hookDoActionAll();
-      injectBtn();
-    }, 200);
-  });
-
-  if (document.readyState === 'complete') {
-    setTimeout(function() { hookSendActions(); hookDoActionAll(); injectBtn(); }, 200);
   }
 
   // ─── Кнопка ───────────────────────────────────────────────────────────────
@@ -229,12 +222,9 @@
       btnEl.title = 'Рекаст: повторить атаку [' + HOTKEY + ']';
       if (badgeEl) { badgeEl.textContent = '⚔'; badgeEl.className = 'attack'; badgeEl.style.display = 'inline-block'; }
     } else if (snap && snap.acts && snap.acts.length > 0) {
-      // Проверяем актуальность локации
-      var curLoc = getCurrentLoc();
-      if (snap.loc && curLoc && snap.loc !== curLoc) {
-        // Устарело
+      if (!isSnapshotValid(snap)) {
         btnEl.className = 'noact';
-        btnEl.title = 'Рекаст: смените локацию — нужно применить снова [' + HOTKEY + ']';
+        btnEl.title = 'Рекаст: действия недоступны в этой локации [' + HOTKEY + ']';
         if (badgeEl) badgeEl.style.display = 'none';
       } else {
         btnEl.className = '';
@@ -253,6 +243,22 @@
     if (!btnEl) return;
     btnEl.classList.add('flash');
     setTimeout(function(){ if(btnEl) btnEl.classList.remove('flash'); }, 200);
+  }
+
+  // ─── Старт ────────────────────────────────────────────────────────────────
+  window.addEventListener('load', function() {
+    // Если фрейм загрузился после перехода между локациями — сбрасываем снапшот
+    try {
+      var href = window.location.href;
+      if (href.indexOf('rm=go') !== -1 || href.indexOf('rm=empty') !== -1) {
+        setSnapshot(null);
+      }
+    } catch(e) {}
+
+    setTimeout(function() { hookSendActions(); hookDoActionAll(); injectBtn(); }, 200);
+  });
+  if (document.readyState === 'complete') {
+    setTimeout(function() { hookSendActions(); hookDoActionAll(); injectBtn(); }, 200);
   }
 
   // ─── Hotkey ───────────────────────────────────────────────────────────────
