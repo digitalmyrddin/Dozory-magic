@@ -18,12 +18,19 @@
 | Скрипт | Описание | Установить |
 |--------|----------|------------|
 | **FastTravel** | Быстрое перемещение по клику на карте. | [Установить](https://raw.githubusercontent.com/digitalmyrddin/Dozory-magic/main/userscripts/FastTravel.user.js) |
+| **Recast** | Быстрый повтор последних действий в быту по кнопке или клавише F2. | [Установить](https://raw.githubusercontent.com/digitalmyrddin/Dozory-magic/main/userscripts/Recast.user.js) |
 
 ### Детали
 
-— **FastTravel** :
+— **FastTravel**:
 Левый клик мышью по карте позволяет мгновенно перейти в локацию последним выбранным способом. Правый клик мышью - открыть родное окно выбора способа передвижения \ транспорта.
+
+
+— **Recast**:
+Кнопка «Рекаст» или хоткей F2 повторяют последние применённые в быту действия или последнюю попытку нападения. Повтор действия "Напасть" возможен только в случае, если оно было произведено через панель "Действия", а не через кнопку "Напасть" возле ника игрока.
 
 ---
 
-*Проверено на Firefox + Greasemonkey и PaleMoon + Tampermonkey. Игра: [game.dozory.ru](http://game.dozory.ru)*
+*Проверено на Firefox + Greasemonkey и PaleMoon + Tampermonkey. 
+
+Игра: [game.dozory.ru](http://game.dozory.ru)*
