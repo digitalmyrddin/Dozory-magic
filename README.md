@@ -34,6 +34,8 @@
 
 ---
 
-*Проверено на Firefox + Greasemonkey и PaleMoon + Tampermonkey. 
+Проверено на Firefox + Greasemonkey и PaleMoon + Tampermonkey. 
 
-Игра: [game.dozory.ru](http://game.dozory.ru)*
+Игра: [game.dozory.ru](http://game.dozory.ru)
+
+*For those who come after... from [White Witcher](http://profiles.dozory.ru/cgi-bin/profiles.cgi?id=993574)*
