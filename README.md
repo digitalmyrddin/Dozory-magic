@@ -26,4 +26,4 @@
 
 ---
 
-*Проверено на Firefox + Greasemonkey. Игра: [game.dozory.ru](http://game.dozory.ru)*
+*Проверено на Firefox + Greasemonkey и PaleMoon + Tampermonkey. Игра: [game.dozory.ru](http://game.dozory.ru)*
