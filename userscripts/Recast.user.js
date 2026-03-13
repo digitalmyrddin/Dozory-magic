@@ -2,7 +2,7 @@
 // @name         Дозоры — Рекаст
 // @namespace    http://dozory.ru/
 // @version      2.1
-// @description  Кнопка «Рекаст» - повтор последний действий «Применить» или попытки нападения. Быстрая клавиша - F2.
+// @description  Кнопка «Рекаст» - быстрый повтор последних действий в быту или попытки нападения. Быстрая клавиша - F2.
 // @author       White Witcher (featuring Claude AI)
 // @include      http://game.dozory.ru/cgi-bin/main.cgi*
 // @include      http://game.dozory.ru/*
