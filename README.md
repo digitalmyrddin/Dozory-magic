@@ -18,7 +18,7 @@
 | Скрипт | Описание | Установить |
 |--------|----------|------------|
 | **FastTravel** | Быстрое перемещение по клику на карте. | [Установить](https://raw.githubusercontent.com/digitalmyrddin/Dozory-magic/main/userscripts/FastTravel.user.js) |
-| **Recast** | Быстрый повтор последних действий в быту по кнопке или клавише F2. | [Установить](https://raw.githubusercontent.com/digitalmyrddin/Dozory-magic/main/userscripts/Recast.user.js) |
+| **Recast** | Быстрый повтор последних действий в быту одной кнопкой. | [Установить](https://raw.githubusercontent.com/digitalmyrddin/Dozory-magic/main/userscripts/Recast.user.js) |
 
 ### Детали
 
