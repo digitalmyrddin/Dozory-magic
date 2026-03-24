@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Дозоры — Горячие главиши рефлекса
 // @namespace    http://dozory.ru/
-// @version      2.1
+// @version      2.2
 // @description  Быстрое переключение рефлекса с помощью горящих клавиш.
 // @author       White Witcher (featuring Claude AI)
 // @include      http://game.dozory.ru/cgi-bin/main.cgi*
@@ -21,10 +21,9 @@
   var IS_AJAX   = window.location && window.location.href.indexOf('ajax.html') !== -1;
   if (!IS_ACTION && !IS_STRING) return;
  
-  var STORAGE_SETS = 'doz_reflex_sets';   // { name: id, ... }
-  var STORAGE_KEYS = 'doz_reflex_keys';   // { key: name, ... }
+  var STORAGE_SETS = 'doz_reflex_sets';
+  var STORAGE_KEYS = 'doz_reflex_keys';
   var RESERVED = ['F2'];
-  // Добавлены клавиши из скрипта заклинаний чтобы не было конфликтов
   (function() {
     try {
       var spellKeys = JSON.parse(localStorage.getItem('doz_hotkeys_v2') || '{}');
@@ -45,20 +44,17 @@
     try { localStorage.setItem(STORAGE_KEYS, JSON.stringify(k)); } catch(e) {}
   }
  
-  var knownSets = loadSets(); 
-  var keyBinds  = loadKeys(); 
+  var knownSets = loadSets();
+  var keyBinds  = loadKeys();
  
   function scanSetsFromDOM() {
     var found = {};
-
     var all = document.querySelectorAll('[onclick*="apply_magic_set"]');
     all.forEach(function(el) {
       var m = (el.getAttribute('onclick') || '').match(/apply_magic_set\((\d+)\)/);
       if (!m) return;
       var id   = parseInt(m[1]);
-
       var name = (el.textContent || el.innerText || '').trim();
-
       if (!name) {
         var div = el.querySelector('div');
         if (div) name = div.textContent.trim();
@@ -71,7 +67,6 @@
   function updateSets() {
     var found = scanSetsFromDOM();
     if (Object.keys(found).length > 0) {
-
       Object.keys(found).forEach(function(name) { knownSets[name] = found[name]; });
       saveSets(knownSets);
     }
@@ -89,11 +84,8 @@
       if (IS_AJAX) {
 
         setTimeout(function() { window.location.reload(); }, 800);
-      } else if (window.location.href.indexOf('magic') !== -1 ||
-                 window.location.href.indexOf('rm=go') !== -1) {
-        window.location.href = '/cgi-bin/main.cgi';
       } else {
-        window.location.reload();
+        window.location.href = '/cgi-bin/main.cgi';
       }
     };
     xhr.onerror = function() { showToast('⚠ Ошибка смены рефлекса'); };
@@ -118,7 +110,6 @@
     var st = document.createElement('style');
     st.id = 'doz-ref-style';
     st.textContent = [
-
       '#doz-ref-overlay { position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:99998; display:none; }',
       '#doz-ref-panel {',
       '  position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);',
@@ -129,7 +120,6 @@
       '}',
       '#doz-ref-panel h3 { margin:0 0 4px; font-size:13px; color:#bb99ee; border-bottom:1px solid #3a2a6a; padding-bottom:6px; }',
       '#doz-ref-hint { font:10px Arial; color:#556; margin-bottom:10px; line-height:1.5; }',
- 
       '.doz-ref-row { display:flex; align-items:center; gap:8px; margin-bottom:6px; }',
       '.doz-ref-key {',
       '  width:72px; padding:3px 5px; flex-shrink:0;',
@@ -140,24 +130,20 @@
       '.doz-ref-key.reserved  { border-color:#cc4444 !important; color:#cc4444 !important; }',
       '.doz-ref-key.duplicate { border-color:#ff8800 !important; color:#ff8800 !important; }',
       '@keyframes doz-ref-blink { 0%,100%{opacity:1} 50%{opacity:.3} }',
- 
       '.doz-ref-sel {',
       '  flex:1; padding:3px 5px;',
       '  background:#0e1220; border:1px solid #4a3a7a; border-radius:3px;',
       '  color:#dde; font:11px Arial;',
       '}',
       '.doz-ref-sel:focus { border-color:#8a6aee; outline:none; }',
- 
       '.doz-ref-del { cursor:pointer; color:#cc4444; font-size:15px; padding:0 3px; flex-shrink:0; }',
       '.doz-ref-del:hover { color:#ff6666; }',
- 
       '.doz-ref-error {',
       '  position:absolute; top:100%; left:0; z-index:1;',
       '  background:#2a1010; border:1px solid #cc4444; border-radius:3px;',
       '  color:#ff8888; font:10px Arial; padding:3px 7px;',
       '  white-space:nowrap; margin-top:2px; pointer-events:none;',
       '}',
- 
       '#doz-ref-add { margin-top:6px; padding:3px 12px; background:#2a1a4a; border:1px solid #4a3090; border-radius:3px; color:#bb99ee; cursor:pointer; font:11px Arial; }',
       '#doz-ref-add:hover { background:#3a2a5a; }',
       '#doz-ref-hint2 { font:10px Arial; color:#446; margin-top:8px; padding:6px 8px; background:#12101e; border-radius:4px; border:1px solid #2a2050; }',
@@ -165,8 +151,6 @@
       '#doz-ref-save { padding:4px 18px; background:linear-gradient(to bottom,#2a2a5a,#1a1a3a); border:1px solid #4a4a9a; border-radius:3px; color:#aaaaff; cursor:pointer; font:bold 11px Arial; }',
       '#doz-ref-save:hover { background:linear-gradient(to bottom,#3a3a6a,#2a2a4a); }',
       '#doz-ref-close { padding:4px 14px; background:#2a2a3a; border:1px solid #444; border-radius:3px; color:#888; cursor:pointer; font:11px Arial; }',
- 
-      
       '#doz-ref-toast {',
       '  position:fixed; bottom:104px; left:50%; transform:translateX(-50%);',
       '  z-index:99999; padding:5px 14px; background:rgba(15,10,35,.95);',
@@ -190,7 +174,7 @@
     panel.id = 'doz-ref-panel';
     panel.addEventListener('click', function(e){ e.stopPropagation(); });
     panel.innerHTML = [
-      '<h3>✦ Хоткеи рефлекса</h3>',
+      '<h3>✨ Хоткеи рефлекса</h3>',
       '<div id="doz-ref-hint">Назначьте клавиши для быстрого переключения комплектов магии.</div>',
       '<div id="doz-ref-rows"></div>',
       '<button id="doz-ref-add">+ Добавить</button>',
@@ -213,7 +197,7 @@
     panel.querySelector('#doz-ref-close').addEventListener('click', closePanel);
   }
  
-   function openSettingsPanel() {
+  function openSettingsPanel() {
     var knownEl = panel.querySelector('#doz-ref-known');
     var names = Object.keys(knownSets);
     if (knownEl) knownEl.textContent = names.length ? names.join(', ') : '— откройте Магия→Рефлекс';
@@ -342,7 +326,6 @@
     closePanel(); showToast('✓ Хоткеи рефлекса сохранены');
   }
  
- 
   function isInCombat() {
     try {
       var af = window.top && window.top.frames && window.top.frames['action'];
@@ -366,7 +349,6 @@
     btn.addEventListener('mouseout',  function(){ btn.style.opacity='.85'; });
     btn.addEventListener('click', function(e){
       e.stopPropagation();
-
       if (IS_AJAX) { openSettingsPanel(); return; }
       try {
         var af = window.top.frames['action'];
@@ -446,12 +428,10 @@
   }
  
   window.addEventListener('load', function(){
-
     setTimeout(start, IS_STRING ? 1500 : 300);
   });
   if (document.readyState === 'complete') setTimeout(start, IS_STRING ? 1500 : 300);
  
-  // Скрывает кнопку во время боя
   if (IS_STRING || IS_AJAX) {
     setInterval(function() {
       var btn = document.getElementById('doz-ref-btn');
