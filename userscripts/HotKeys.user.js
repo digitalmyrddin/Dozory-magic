@@ -1,12 +1,13 @@
 // ==UserScript==
-// @name         Дозоры — Горячие клавиши заклинаний
+// @name         Дозоры — Горячие главиши рефлекса
 // @namespace    http://dozory.ru/
-// @version      2.1
-// @description  Горячие клавиши для заклинаний в быту.
-// @author       White Witcher (featuring Claude AI) 
+// @version      2.2
+// @description  Быстрое переключение рефлекса с помощью горящих клавиш.
+// @author       White Witcher (featuring Claude AI)
 // @include      http://game.dozory.ru/cgi-bin/main.cgi*
 // @include      http://game.dozory.ru/*
 // @include      http://dozory.ru/*
+// @include      http://game.dozory.ru/footer.html*
 // @include      http://*.dozory.ru/*
 // @run-at       document-end
 // @grant        none
@@ -14,442 +15,431 @@
 
 (function () {
   'use strict';
-
-  if (window.name !== 'action') return;
-
-  var RESERVED_KEYS = ['F2'];
-  // Резерв клавиши из скрипта рефлекса чтобы не было конфликтов
+ 
+  var IS_ACTION = window.name === 'action';
+  var IS_STRING = window.name === 'string' || (window.location && window.location.href.indexOf('ajax.html') !== -1);
+  var IS_AJAX   = window.location && window.location.href.indexOf('ajax.html') !== -1;
+  if (!IS_ACTION && !IS_STRING) return;
+ 
+  var STORAGE_SETS = 'doz_reflex_sets';
+  var STORAGE_KEYS = 'doz_reflex_keys';
+  var RESERVED = ['F2'];
   (function() {
     try {
-      var reflexKeys = JSON.parse(localStorage.getItem('doz_reflex_keys') || '{}');
-      Object.keys(reflexKeys).forEach(function(k){ if (RESERVED_KEYS.indexOf(k) === -1) RESERVED_KEYS.push(k); });
+      var spellKeys = JSON.parse(localStorage.getItem('doz_hotkeys_v2') || '{}');
+      Object.keys(spellKeys).forEach(function(k){ if (RESERVED.indexOf(k) === -1) RESERVED.push(k); });
     } catch(e) {}
   })();
-  var STORAGE_KEY   = 'doz_hotkeys_v2';
-
-  function loadBindings() {
-    try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch(e) { return {}; }
+ 
+  function loadSets() {
+    try { return JSON.parse(localStorage.getItem(STORAGE_SETS) || '{}'); } catch(e) { return {}; }
   }
-  function saveBindings(b) {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(b)); } catch(e) {}
+  function saveSets(s) {
+    try { localStorage.setItem(STORAGE_SETS, JSON.stringify(s)); } catch(e) {}
   }
-  var bindings = loadBindings();
-
-  function getAllSpells() {
-    var spells = [];
-    ['acts_br','acts_mg','acts_ar','acts_am'].forEach(function(pool) {
-      try {
-        var arr = window[pool];
-        if (!Array.isArray(arr)) return;
-        arr.forEach(function(a) { if (a && a[0]) spells.push({ name: a[0], data: a }); });
-      } catch(e) {}
+  function loadKeys() {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEYS) || '{}'); } catch(e) { return {}; }
+  }
+  function saveKeys(k) {
+    try { localStorage.setItem(STORAGE_KEYS, JSON.stringify(k)); } catch(e) {}
+  }
+ 
+  var knownSets = loadSets();
+  var keyBinds  = loadKeys();
+ 
+  function scanSetsFromDOM() {
+    var found = {};
+    var all = document.querySelectorAll('[onclick*="apply_magic_set"]');
+    all.forEach(function(el) {
+      var m = (el.getAttribute('onclick') || '').match(/apply_magic_set\((\d+)\)/);
+      if (!m) return;
+      var id   = parseInt(m[1]);
+      var name = (el.textContent || el.innerText || '').trim();
+      if (!name) {
+        var div = el.querySelector('div');
+        if (div) name = div.textContent.trim();
+      }
+      if (name && id) found[name] = id;
     });
-    return spells;
+    return found;
   }
-
-  function castSpell(spellName) {
-    var spells = getAllSpells();
-    var found  = null;
-    var lc = spellName.toLowerCase().trim();
-    for (var i = 0; i < spells.length; i++) {
-      if (spells[i].name.toLowerCase().trim() === lc) { found = spells[i]; break; }
+ 
+  function updateSets() {
+    var found = scanSetsFromDOM();
+    if (Object.keys(found).length > 0) {
+      Object.keys(found).forEach(function(name) { knownSets[name] = found[name]; });
+      saveSets(knownSets);
     }
-    if (!found) { showToast('⚠ «' + spellName + '» не найдено'); return; }
-
-    try {
-      var a = found.data;
-      var castType = a[7];
-      var target;
-      if (castType === 128) {
-        target = window.__lact
-               || (window.parent.action && window.parent.action.__lact)
-               || '';
-      } else {
-        target = (window.person && window.person.person_id)
-               || (window.parent.action && window.parent.action.person
-                   ? window.parent.action.person.person_id : '')
-               || '';
-      }
-
-      window.parent.acts_sel = [];
-      window.parent.acts_sel.push(['', '', target, '', a[3] || a[4] || '']);
-      if (typeof window.sendActions === 'function') {
-        window.sendActions(0);
-        showToast('✓ ' + spellName);
-      }
-    } catch(e) { showToast('⚠ ' + e.message); }
   }
-
+ 
+  function applySet(name) {
+    var id = knownSets[name];
+    if (!id) { showToast('⚠ Комплект «' + name + '» не найден — откройте Магию→Рефлекс'); return; }
+ 
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', '/cgi-bin/magic_reflex.cgi', true);
+    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+    xhr.onload = function() {
+      showToast('✓ Рефлекс: ' + name);
+      if (IS_AJAX) {
+        // В подземелье — небольшая задержка чтобы тост показался
+        setTimeout(function() { window.location.reload(); }, 800);
+      } else {
+        // GET навигация вместо reload() — иначе браузер повторяет последнее действие игры
+        window.location.href = '/cgi-bin/main.cgi';
+      }
+    };
+    xhr.onerror = function() { showToast('⚠ Ошибка смены рефлекса'); };
+    xhr.send('rm=set_magic_set&set_id=' + id);
+  }
+ 
   function showToast(msg) {
-    var t = document.getElementById('doz-hk-toast');
-    if (!t) { t = document.createElement('div'); t.id='doz-hk-toast'; document.body.appendChild(t); }
+    injectStyles();
+    var t = document.getElementById('doz-ref-toast');
+    if (!t) {
+      t = document.createElement('div');
+      t.id = 'doz-ref-toast';
+      document.body.appendChild(t);
+    }
     t.textContent = msg; t.style.opacity = '1';
     clearTimeout(t._tmr);
-    t._tmr = setTimeout(function(){ t.style.opacity='0'; }, 1800);
+    t._tmr = setTimeout(function(){ t.style.opacity='0'; }, 2500);
   }
-
+ 
   function injectStyles() {
-    if (document.getElementById('doz-hk-style')) return;
+    if (document.getElementById('doz-ref-style')) return;
     var st = document.createElement('style');
-    st.id = 'doz-hk-style';
+    st.id = 'doz-ref-style';
     st.textContent = [
-      '#doz-hk-open {',
-      '  display:inline-flex; align-items:center; justify-content:center;',
-      '  cursor:pointer; user-select:none; vertical-align:middle;',
-      '  width:26px; height:22px;',
-      '  background:linear-gradient(to bottom,#5a6a9a 0%,#2a3a6a 50%,#1a2a5a 100%);',
-      '  border:1px solid #1a2050; border-radius:3px;',
-      '  box-shadow:inset 0 1px 0 rgba(255,255,255,.15),0 1px 2px rgba(0,0,0,.5);',
-      '}',
-      '#doz-hk-open:hover { background:linear-gradient(to bottom,#6a7aaa 0%,#3a4a7a 100%); }',
-      '#doz-hk-open svg { display:block; }',
-
-      '#doz-hk-overlay { position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:99998; display:none; }',
-      '#doz-hk-panel {',
+      '#doz-ref-overlay { position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:99998; display:none; }',
+      '#doz-ref-panel {',
       '  position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);',
-      '  z-index:99999; background:#1a1e2e; border:2px solid #3a4a7a;',
-      '  border-radius:8px; padding:14px 16px 12px; min-width:360px; max-width:460px;',
+      '  z-index:99999; background:#1a1e2e; border:2px solid #4a3a7a;',
+      '  border-radius:8px; padding:14px 16px 12px; min-width:340px;',
       '  font:12px Arial,sans-serif; color:#ccd;',
       '  box-shadow:0 6px 30px rgba(0,0,0,.8); display:none;',
       '}',
-      '#doz-hk-panel h3 { margin:0 0 8px; font-size:13px; color:#99aaee; border-bottom:1px solid #2a3a6a; padding-bottom:6px; }',
-      '#doz-hk-hint { font:10px Arial; color:#556; margin-bottom:8px; }',
-
-      '.doz-hk-row { display:flex; align-items:center; gap:6px; margin-bottom:6px; position:relative; }',
-      '.doz-hk-key {',
+      '#doz-ref-panel h3 { margin:0 0 4px; font-size:13px; color:#bb99ee; border-bottom:1px solid #3a2a6a; padding-bottom:6px; }',
+      '#doz-ref-hint { font:10px Arial; color:#556; margin-bottom:10px; line-height:1.5; }',
+      '.doz-ref-row { display:flex; align-items:center; gap:8px; margin-bottom:6px; }',
+      '.doz-ref-key {',
       '  width:72px; padding:3px 5px; flex-shrink:0;',
-      '  background:#0e1220; border:1px solid #3a4a7a; border-radius:3px;',
-      '  color:#aabbff; font:bold 11px Arial; cursor:pointer; text-align:center; user-select:none;',
+      '  background:#0e1220; border:1px solid #4a3a7a; border-radius:3px;',
+      '  color:#ccaaff; font:bold 11px Arial; cursor:pointer; text-align:center; user-select:none;',
       '}',
-      '.doz-hk-key.listening  { border-color:#ffaa00; color:#ffaa00; animation:doz-blink .5s infinite; }',
-      '.doz-hk-key.reserved   { border-color:#cc4444 !important; color:#cc4444 !important; }',
-      '.doz-hk-key.duplicate  { border-color:#ff8800 !important; color:#ff8800 !important; }',
-      '@keyframes doz-blink { 0%,100%{opacity:1} 50%{opacity:.3} }',
-
-      '.doz-hk-error {',
+      '.doz-ref-key.listening { border-color:#ffaa00; color:#ffaa00; animation:doz-ref-blink .5s infinite; }',
+      '.doz-ref-key.reserved  { border-color:#cc4444 !important; color:#cc4444 !important; }',
+      '.doz-ref-key.duplicate { border-color:#ff8800 !important; color:#ff8800 !important; }',
+      '@keyframes doz-ref-blink { 0%,100%{opacity:1} 50%{opacity:.3} }',
+      '.doz-ref-sel {',
+      '  flex:1; padding:3px 5px;',
+      '  background:#0e1220; border:1px solid #4a3a7a; border-radius:3px;',
+      '  color:#dde; font:11px Arial;',
+      '}',
+      '.doz-ref-sel:focus { border-color:#8a6aee; outline:none; }',
+      '.doz-ref-del { cursor:pointer; color:#cc4444; font-size:15px; padding:0 3px; flex-shrink:0; }',
+      '.doz-ref-del:hover { color:#ff6666; }',
+      '.doz-ref-error {',
       '  position:absolute; top:100%; left:0; z-index:1;',
       '  background:#2a1010; border:1px solid #cc4444; border-radius:3px;',
       '  color:#ff8888; font:10px Arial; padding:3px 7px;',
       '  white-space:nowrap; margin-top:2px; pointer-events:none;',
       '}',
-
-      '.doz-hk-spell-wrap { flex:1; position:relative; }',
-      '.doz-hk-spell {',
-      '  width:100%; box-sizing:border-box; padding:3px 5px;',
-      '  background:#0e1220; border:1px solid #3a4a7a; border-radius:3px;',
-      '  color:#dde; font:11px Arial;',
-      '}',
-      '.doz-hk-spell:focus { border-color:#6a8aee; outline:none; }',
-
-      '.doz-ac-list {',
-      '  position:absolute; top:100%; left:0; right:0; z-index:100000;',
-      '  background:#0e1220; border:1px solid #3a4a7a; border-top:none;',
-      '  border-radius:0 0 4px 4px; max-height:140px; overflow-y:auto; display:none;',
-      '}',
-      '.doz-ac-item { padding:4px 7px; cursor:pointer; font:11px Arial; color:#ccd; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }',
-      '.doz-ac-item:hover, .doz-ac-item.active { background:#2a3a6a; color:#fff; }',
-
-      '.doz-hk-del { cursor:pointer; color:#cc4444; font-size:15px; padding:0 3px; flex-shrink:0; }',
-      '.doz-hk-del:hover { color:#ff6666; }',
-
-      '#doz-hk-add { margin-top:6px; padding:3px 12px; background:#2a3a6a; border:1px solid #3a5090; border-radius:3px; color:#99aaee; cursor:pointer; font:11px Arial; }',
-      '#doz-hk-add:hover { background:#3a4a7a; }',
-      '#doz-hk-footer { display:flex; justify-content:space-between; margin-top:10px; border-top:1px solid #2a3a6a; padding-top:10px; }',
-      '#doz-hk-save { padding:4px 18px; background:linear-gradient(to bottom,#2a5a2a,#1a3a1a); border:1px solid #3a7a3a; border-radius:3px; color:#aaffaa; cursor:pointer; font:bold 11px Arial; }',
-      '#doz-hk-save:hover { background:linear-gradient(to bottom,#3a6a3a,#2a4a2a); }',
-      '#doz-hk-close { padding:4px 14px; background:#2a2a3a; border:1px solid #444; border-radius:3px; color:#888; cursor:pointer; font:11px Arial; }',
-
-      '#doz-hk-toast {',
-      '  position:fixed; bottom:80px; left:50%; transform:translateX(-50%);',
-      '  z-index:99999; padding:5px 14px; background:rgba(15,18,40,.95);',
-      '  border:1px solid #3a4a7a; border-radius:4px; color:#ccd; font:11px Arial;',
+      '#doz-ref-add { margin-top:6px; padding:3px 12px; background:#2a1a4a; border:1px solid #4a3090; border-radius:3px; color:#bb99ee; cursor:pointer; font:11px Arial; }',
+      '#doz-ref-add:hover { background:#3a2a5a; }',
+      '#doz-ref-hint2 { font:10px Arial; color:#446; margin-top:8px; padding:6px 8px; background:#12101e; border-radius:4px; border:1px solid #2a2050; }',
+      '#doz-ref-footer { display:flex; justify-content:space-between; margin-top:10px; border-top:1px solid #2a1a5a; padding-top:10px; }',
+      '#doz-ref-save { padding:4px 18px; background:linear-gradient(to bottom,#2a2a5a,#1a1a3a); border:1px solid #4a4a9a; border-radius:3px; color:#aaaaff; cursor:pointer; font:bold 11px Arial; }',
+      '#doz-ref-save:hover { background:linear-gradient(to bottom,#3a3a6a,#2a2a4a); }',
+      '#doz-ref-close { padding:4px 14px; background:#2a2a3a; border:1px solid #444; border-radius:3px; color:#888; cursor:pointer; font:11px Arial; }',
+      '#doz-ref-toast {',
+      '  position:fixed; bottom:104px; left:50%; transform:translateX(-50%);',
+      '  z-index:99999; padding:5px 14px; background:rgba(15,10,35,.95);',
+      '  border:1px solid #4a3a7a; border-radius:4px; color:#ccaaff; font:11px Arial;',
       '  transition:opacity .4s; opacity:0; pointer-events:none; white-space:nowrap;',
       '}'
     ].join('\n');
     document.head.appendChild(st);
   }
-
-  function setupAutocomplete(input) {
-    var wrap = input.parentElement;
-    var list = document.createElement('div');
-    list.className = 'doz-ac-list';
-    wrap.appendChild(list);
-    var activeIdx = -1;
-
-    function getNames() { return getAllSpells().map(function(s){ return s.name; }); }
-
-    function render(filter) {
-      var names = getNames();
-      var lc = (filter || '').toLowerCase().trim();
-      var matched = lc ? names.filter(function(n){ return n.toLowerCase().indexOf(lc) !== -1; }) : names;
-      list.innerHTML = ''; activeIdx = -1;
-      if (matched.length === 0) { list.style.display='none'; return; }
-      matched.slice(0,20).forEach(function(name) {
-        var item = document.createElement('div');
-        item.className = 'doz-ac-item';
-        if (lc) {
-          var idx = name.toLowerCase().indexOf(lc);
-          item.innerHTML = escH(name.slice(0,idx))
-            + '<b style="color:#ffdd88">' + escH(name.slice(idx, idx+lc.length)) + '</b>'
-            + escH(name.slice(idx+lc.length));
-        } else { item.textContent = name; }
-        item.addEventListener('mousedown', function(e){
-          e.preventDefault(); input.value = name; list.style.display='none';
-        });
-        list.appendChild(item);
-      });
-      list.style.display = 'block';
-    }
-
-    function setActive(idx) {
-      var items = list.querySelectorAll('.doz-ac-item');
-      items.forEach(function(el){ el.classList.remove('active'); });
-      if (idx >= 0 && idx < items.length) {
-        items[idx].classList.add('active'); activeIdx = idx;
-        items[idx].scrollIntoView({block:'nearest'});
-      }
-    }
-
-    input.addEventListener('input',  function(){ render(input.value); });
-    input.addEventListener('focus',  function(){ render(input.value); });
-    input.addEventListener('blur',   function(){ setTimeout(function(){ list.style.display='none'; }, 150); });
-    input.addEventListener('keydown', function(e){
-      var items = list.querySelectorAll('.doz-ac-item');
-      if (list.style.display==='none') return;
-      if (e.key==='ArrowDown') { e.preventDefault(); setActive(Math.min(activeIdx+1, items.length-1)); }
-      else if (e.key==='ArrowUp') { e.preventDefault(); setActive(Math.max(activeIdx-1, 0)); }
-      else if (e.key==='Enter' && activeIdx>=0) { e.preventDefault(); input.value=items[activeIdx].textContent; list.style.display='none'; }
-      else if (e.key==='Escape') { list.style.display='none'; }
-    });
-  }
-
-  function escH(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-
-  var overlay, panel, rowsContainer;
+ 
+  var overlay, panel, rowsEl;
   var listeningEl = null;
-
+ 
   function buildUI() {
-    if (document.getElementById('doz-hk-overlay')) return;
+    if (document.getElementById('doz-ref-overlay')) return;
     overlay = document.createElement('div');
-    overlay.id = 'doz-hk-overlay';
+    overlay.id = 'doz-ref-overlay';
     overlay.addEventListener('click', closePanel);
-
+ 
     panel = document.createElement('div');
-    panel.id = 'doz-hk-panel';
+    panel.id = 'doz-ref-panel';
     panel.addEventListener('click', function(e){ e.stopPropagation(); });
     panel.innerHTML = [
-      '<h3>⌨ Горячие клавиши заклинаний</h3>',
-      '<div id="doz-hk-hint">Нажмите на поле клавиши → кликните клавишу. F2 зарезервирован для плагина Рекаста.</div>',
-      '<div id="doz-hk-rows"></div>',
-      '<button id="doz-hk-add">+ Добавить</button>',
-      '<div id="doz-hk-footer"><button id="doz-hk-close">Закрыть</button><button id="doz-hk-save">✓ Сохранить</button></div>'
+      '<h3>✨ Хоткеи рефлекса</h3>',
+      '<div id="doz-ref-hint">Назначьте клавиши для быстрого переключения комплектов магии.</div>',
+      '<div id="doz-ref-rows"></div>',
+      '<button id="doz-ref-add">+ Добавить</button>',
+      '<div id="doz-ref-hint2">',
+        'Комплекты считываются автоматически когда вы открываете <b>Магия → Рефлекс</b>.<br>',
+        'Известные: <span id="doz-ref-known">—</span>',
+      '</div>',
+      '<div id="doz-ref-footer">',
+        '<button id="doz-ref-close">Закрыть</button>',
+        '<button id="doz-ref-save">✓ Сохранить</button>',
+      '</div>'
     ].join('');
-
+ 
     document.body.appendChild(overlay);
     document.body.appendChild(panel);
-    rowsContainer = panel.querySelector('#doz-hk-rows');
-    panel.querySelector('#doz-hk-add').addEventListener('click', function(){ addRow('',''); });
-    panel.querySelector('#doz-hk-save').addEventListener('click', saveCurrent);
-    panel.querySelector('#doz-hk-close').addEventListener('click', closePanel);
+ 
+    rowsEl = panel.querySelector('#doz-ref-rows');
+    panel.querySelector('#doz-ref-add').addEventListener('click', function(){ addRow('', ''); });
+    panel.querySelector('#doz-ref-save').addEventListener('click', saveCurrent);
+    panel.querySelector('#doz-ref-close').addEventListener('click', closePanel);
   }
-
-  function openPanel()  { renderRows(); overlay.style.display='block'; panel.style.display='block'; }
+ 
+  function openSettingsPanel() {
+    var knownEl = panel.querySelector('#doz-ref-known');
+    var names = Object.keys(knownSets);
+    if (knownEl) knownEl.textContent = names.length ? names.join(', ') : '— откройте Магия→Рефлекс';
+    renderRows();
+    overlay.style.display = 'block'; panel.style.display = 'block';
+  }
   function closePanel() {
-    if (listeningEl) { listeningEl.classList.remove('listening'); listeningEl=null; }
-    overlay.style.display='none'; panel.style.display='none';
+    if (listeningEl) { listeningEl.classList.remove('listening'); listeningEl = null; }
+    overlay.style.display = 'none'; panel.style.display = 'none';
   }
-
+ 
   function renderRows() {
-    rowsContainer.innerHTML = '';
-    var keys = Object.keys(bindings);
-    if (keys.length===0) { addRow('F3',''); } else { keys.forEach(function(k){ addRow(k, bindings[k]); }); }
+    rowsEl.innerHTML = '';
+    var keys = Object.keys(keyBinds);
+    if (keys.length === 0) { addRow('', ''); }
+    else { keys.forEach(function(k){ addRow(k, keyBinds[k]); }); }
   }
-
-  function getOtherKeys(exceptKeyEl) {
+ 
+  function getOtherKeys(exceptEl) {
     var keys = [];
-    rowsContainer.querySelectorAll('.doz-hk-key').forEach(function(el){
-      if (el !== exceptKeyEl && el.dataset.key) keys.push(el.dataset.key);
+    rowsEl.querySelectorAll('.doz-ref-key').forEach(function(el){
+      if (el !== exceptEl && el.dataset.key) keys.push(el.dataset.key);
     });
     return keys;
   }
-
-  function addRow(key, spell) {
+ 
+  function addRow(key, name) {
     var row = document.createElement('div');
-    row.className = 'doz-hk-row';
-
+    row.className = 'doz-ref-row';
+    row.style.position = 'relative';
+ 
     var keyEl = document.createElement('div');
-    keyEl.className = 'doz-hk-key';
+    keyEl.className = 'doz-ref-key';
     keyEl.textContent = key || 'Клавиша';
     keyEl.dataset.key = key;
-
-    var wrap = document.createElement('div');
-    wrap.className = 'doz-hk-spell-wrap';
-    var spellEl = document.createElement('input');
-    spellEl.type = 'text'; spellEl.className = 'doz-hk-spell';
-    spellEl.placeholder = 'Начните вводить название…';
-    spellEl.value = spell;
-    wrap.appendChild(spellEl);
-    setupAutocomplete(spellEl);
-
+ 
+    var sel = document.createElement('select');
+    sel.className = 'doz-ref-sel';
+    var emptyOpt = document.createElement('option');
+    emptyOpt.value = ''; emptyOpt.textContent = '— выберите комплект —';
+    sel.appendChild(emptyOpt);
+    Object.keys(knownSets).forEach(function(n) {
+      var opt = document.createElement('option');
+      opt.value = n; opt.textContent = n;
+      if (n === name) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    sel.value = name;
+ 
     var del = document.createElement('span');
-    del.className = 'doz-hk-del'; del.textContent = '✕';
+    del.className = 'doz-ref-del'; del.textContent = '✕';
     del.addEventListener('click', function(){ row.parentNode.removeChild(row); });
-
+ 
     keyEl.addEventListener('click', function(e) {
       e.stopPropagation();
       if (listeningEl && listeningEl !== keyEl) {
         listeningEl.classList.remove('listening');
         listeningEl.textContent = listeningEl.dataset.key || 'Клавиша';
       }
-      var oldErr = row.querySelector('.doz-hk-error');
+      var oldErr = row.querySelector('.doz-ref-error');
       if (oldErr) oldErr.parentNode.removeChild(oldErr);
       listeningEl = keyEl;
-      keyEl.classList.add('listening');
-      keyEl.textContent = '...';
+      keyEl.classList.add('listening'); keyEl.textContent = '...';
     });
-
-    row.appendChild(keyEl); row.appendChild(wrap); row.appendChild(del);
-    rowsContainer.appendChild(row);
+ 
+    row.appendChild(keyEl); row.appendChild(sel); row.appendChild(del);
+    rowsEl.appendChild(row);
   }
-
+ 
   document.addEventListener('keyup', function(e) {
     if (!listeningEl) return;
     e.preventDefault(); e.stopPropagation();
   }, true);
-
+ 
   document.addEventListener('keydown', function(e) {
     if (!listeningEl) return;
     e.preventDefault(); e.stopPropagation();
     var key = e.key;
-
     var row = listeningEl;
-    while (row && !row.classList.contains('doz-hk-row')) row = row.parentElement;
-
+    while (row && !row.classList.contains('doz-ref-row')) row = row.parentElement;
+ 
     function showErr(msg) {
       if (!row) return;
-      var old = row.querySelector('.doz-hk-error');
+      var old = row.querySelector('.doz-ref-error');
       if (old) old.parentNode.removeChild(old);
       var err = document.createElement('div');
-      err.className = 'doz-hk-error'; err.textContent = msg;
+      err.className = 'doz-ref-error'; err.textContent = msg;
       row.appendChild(err);
       setTimeout(function(){ if(err.parentNode) err.parentNode.removeChild(err); }, 2000);
     }
-
     function resetKey(el, cls) {
       el.classList.remove('listening'); el.classList.add(cls);
       el.textContent = el.dataset.key || 'Клавиша';
       var captured = el;
-  
       setTimeout(function(){
         if (listeningEl === captured) listeningEl = null;
         setTimeout(function(){ captured.classList.remove(cls); captured.textContent = captured.dataset.key || 'Клавиша'; }, 1850);
       }, 150);
     }
-
+ 
     if (key === 'Escape') {
       listeningEl.classList.remove('listening');
       listeningEl.textContent = listeningEl.dataset.key || 'Клавиша';
       listeningEl = null; return;
     }
-
-    // Зарезервировано
-    if (RESERVED_KEYS.indexOf(key) !== -1) {
-      showErr('⛔ ' + key + ' зарезервирован для Рекаста');
-      resetKey(listeningEl, 'reserved'); return;
+    if (RESERVED.indexOf(key) !== -1) {
+      showErr('⛔ ' + key + ' зарезервирован'); resetKey(listeningEl, 'reserved'); return;
     }
-
-    // Дубль
-    var others = getOtherKeys(listeningEl);
-    if (others.indexOf(key) !== -1) {
-      var takenSpell = '';
-      rowsContainer.querySelectorAll('.doz-hk-key').forEach(function(el){
-        if (el !== listeningEl && el.dataset.key === key) {
-          var inp = el.parentElement && el.parentElement.querySelector('.doz-hk-spell');
-          if (inp) takenSpell = inp.value;
-        }
-      });
-      showErr('⚠ ' + key + ' уже занята' + (takenSpell ? ': «' + takenSpell + '»' : ''));
-      resetKey(listeningEl, 'duplicate'); return;
+    if (getOtherKeys(listeningEl).indexOf(key) !== -1) {
+      showErr('⚠ ' + key + ' уже занята'); resetKey(listeningEl, 'duplicate'); return;
     }
-
-    // Успех
     listeningEl.dataset.key = key;
     listeningEl.textContent = key;
-    listeningEl.classList.remove('listening');
-    listeningEl = null;
+    listeningEl.classList.remove('listening'); listeningEl = null;
   }, true);
-
+ 
   function saveCurrent() {
     var nb = {}, seen = {};
-    rowsContainer.querySelectorAll('.doz-hk-row').forEach(function(row){
-      var key   = row.querySelector('.doz-hk-key').dataset.key || '';
-      var spell = row.querySelector('.doz-hk-spell').value.trim();
-      if (!key || !spell || RESERVED_KEYS.indexOf(key) !== -1 || seen[key]) return;
-      seen[key] = true; nb[key] = spell;
+    rowsEl.querySelectorAll('.doz-ref-row').forEach(function(row){
+      var key  = row.querySelector('.doz-ref-key').dataset.key || '';
+      var name = row.querySelector('.doz-ref-sel').value.trim();
+      if (!key || !name || RESERVED.indexOf(key) !== -1 || seen[key]) return;
+      seen[key] = true; nb[key] = name;
     });
-    bindings = nb; saveBindings(bindings);
-    closePanel(); showToast('✓ Клавиши сохранены');
+    keyBinds = nb; saveKeys(keyBinds);
+    closePanel(); showToast('✓ Хоткеи рефлекса сохранены');
   }
-
+ 
   function isInCombat() {
     try {
-      var t = document.body && document.body.textContent || '';
+      var af = window.top && window.top.frames && window.top.frames['action'];
+      var t = af ? (af.document.body && af.document.body.textContent || '') :
+                   (document.body && document.body.textContent || '');
       return t.indexOf('Союзники') !== -1 && t.indexOf('Противники') !== -1;
     } catch(e) { return false; }
   }
-
+ 
   function injectUI() {
-    if (document.getElementById('doz-hk-open')) return;
-    if (isInCombat()) return; // в бою кнопку не показываем
-    var applyImg = document.querySelector('img[src*="apply"]');
-    if (!applyImg) return;
-    var tr = applyImg;
-    while (tr && tr.tagName !== 'TR') tr = tr.parentElement;
-    if (!tr) return;
-
-    var td = document.createElement('td');
-    td.style.paddingLeft = '6px'; td.style.verticalAlign = 'middle';
-    var btn = document.createElement('span');
-    btn.id = 'doz-hk-open'; btn.title = 'Горячие клавиши заклинаний';
-    btn.innerHTML = '<svg width="16" height="12" viewBox="0 0 16 12" fill="none" xmlns="http://www.w3.org/2000/svg">'
-      + '<rect x="0.5" y="0.5" width="15" height="11" rx="1.5" stroke="white" stroke-opacity="0.9"/>'
-      + '<rect x="2" y="2" width="2" height="2" rx="0.4" fill="white" fill-opacity="0.9"/>'
-      + '<rect x="5" y="2" width="2" height="2" rx="0.4" fill="white" fill-opacity="0.9"/>'
-      + '<rect x="8" y="2" width="2" height="2" rx="0.4" fill="white" fill-opacity="0.9"/>'
-      + '<rect x="11" y="2" width="3" height="2" rx="0.4" fill="white" fill-opacity="0.9"/>'
-      + '<rect x="2" y="5" width="2" height="2" rx="0.4" fill="white" fill-opacity="0.9"/>'
-      + '<rect x="5" y="5" width="2" height="2" rx="0.4" fill="white" fill-opacity="0.9"/>'
-      + '<rect x="8" y="5" width="2" height="2" rx="0.4" fill="white" fill-opacity="0.9"/>'
-      + '<rect x="11" y="5" width="3" height="2" rx="0.4" fill="white" fill-opacity="0.9"/>'
-      + '<rect x="3" y="8" width="10" height="2" rx="0.4" fill="white" fill-opacity="0.9"/>'
-      + '</svg>';
-    btn.addEventListener('click', openPanel);
-    td.appendChild(btn); tr.appendChild(td);
+    if (!IS_STRING) return;
+    if (isInCombat()) return;
+    if (document.getElementById('doz-ref-btn')) return;
+ 
+    var btn = document.createElement('img');
+    btn.id  = 'doz-ref-btn';
+    btn.src = 'http://st.dozory.ru/img/magic/reflex_lable.gif';
+    btn.title = 'Рефлекс: настройки хоткеев';
+    btn.style.cssText = 'cursor:pointer;vertical-align:middle;opacity:.85;border:0;';
+    btn.addEventListener('mouseover', function(){ btn.style.opacity='1'; });
+    btn.addEventListener('mouseout',  function(){ btn.style.opacity='.85'; });
+    btn.addEventListener('click', function(e){
+      e.stopPropagation();
+      if (IS_AJAX) { openSettingsPanel(); return; }
+      try {
+        var af = window.top.frames['action'];
+        if (af && af.doz_reflex_openSettings) { af.doz_reflex_openSettings(); return; }
+      } catch(ex) {}
+      openSettingsPanel();
+    });
+ 
+    var anchor = document.getElementById('cIcon') ||
+                 document.querySelector('img[src*="alien.gif"]');
+ 
+    if (anchor) {
+      var anchorTd = anchor;
+      while (anchorTd && anchorTd.tagName !== 'TD') anchorTd = anchorTd.parentElement;
+      if (anchorTd) {
+        var td = document.createElement('td');
+        td.id = 'doz-ref-td';
+        td.style.cssText = 'padding:0 2px;vertical-align:middle;';
+        td.appendChild(btn);
+        anchorTd.parentNode.insertBefore(td, anchorTd.nextSibling);
+        return;
+      }
+    }
+ 
+    setTimeout(function() {
+      if (!document.getElementById('doz-ref-btn')) injectUI();
+    }, 600);
   }
-
+ 
   function isPanelOpen() {
-    var p = document.getElementById('doz-hk-panel');
+    var p = document.getElementById('doz-ref-panel');
     return p && p.style.display === 'block';
   }
-
+ 
   function handleKey(e) {
     if (listeningEl) return;
-    if (isPanelOpen()) return; // пока открыты настройки хоткеи не срабатывают
+    if (isPanelOpen()) return;
     var tag = (e.target.tagName||'').toUpperCase();
-    if (tag==='INPUT'||tag==='TEXTAREA') return;
+    if (tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT') return;
     var key = e.key;
-    if (RESERVED_KEYS.indexOf(key) !== -1) return;
-    if (bindings[key]) { e.preventDefault(); castSpell(bindings[key]); }
+    if (RESERVED.indexOf(key) !== -1) return;
+    if (keyBinds[key]) {
+      e.preventDefault();
+      if (IS_STRING) {
+        try {
+          var af = window.top.frames['action'];
+          if (af && af.doz_reflex_apply) { af.doz_reflex_apply(keyBinds[key]); return; }
+        } catch(e2) {}
+      }
+      applySet(keyBinds[key]);
+    }
   }
+ 
   document.addEventListener('keydown', handleKey, true);
   setTimeout(function(){
     ['competitors','combats','energy','dusk','chat_main'].forEach(function(n){
-      try { var fw=window.top.frames[n]; if(!fw||!fw.document) return; fw.document.addEventListener('keydown',handleKey,true); } catch(e){}
+      try {
+        var fw = window.top.frames[n];
+        if (!fw||!fw.document) return;
+        fw.document.addEventListener('keydown', handleKey, true);
+      } catch(e){}
     });
   }, 1500);
-
-  function start() { injectStyles(); buildUI(); injectUI(); }
-  window.addEventListener('load', function(){ setTimeout(start, 200); });
-  if (document.readyState==='complete') setTimeout(start, 200);
-
+ 
+  function start() {
+    if (IS_ACTION || IS_AJAX) {
+      updateSets();
+      injectStyles();
+      buildUI();
+      window.doz_reflex_openSettings = openSettingsPanel;
+      window.doz_reflex_apply = applySet;
+    }
+    if (IS_STRING) {
+      injectUI();
+      window.showDozReflexToast = function(msg) { showToast(msg); };
+    }
+  }
+ 
+  window.addEventListener('load', function(){
+    setTimeout(start, IS_STRING ? 1500 : 300);
+  });
+  if (document.readyState === 'complete') setTimeout(start, IS_STRING ? 1500 : 300);
+ 
+  if (IS_STRING || IS_AJAX) {
+    setInterval(function() {
+      var btn = document.getElementById('doz-ref-btn');
+      var inCombat = isInCombat();
+      if (!btn) { if (!inCombat) injectUI(); return; }
+      btn.style.display = inCombat ? 'none' : '';
+    }, 1000);
+  }
+ 
 })();
