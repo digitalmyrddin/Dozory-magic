@@ -17,12 +17,16 @@
 
 | Скрипт | Описание | Установить |
 |--------|----------|------------|
+| **DuelTImer** | Запоминает проведённые дуэли и показывает таймер до повторного получения опыта. | [Установить](https://raw.githubusercontent.com/digitalmyrddin/Dozory-magic/main/userscripts/DuelTimer.user.js) |
 | **FastTravel** | Быстрое перемещение по клику на карте. | [Установить](https://raw.githubusercontent.com/digitalmyrddin/Dozory-magic/main/userscripts/FastTravel.user.js) |
 | **Recast** | Быстрый повтор последних действий в быту одной кнопкой. | [Установить](https://raw.githubusercontent.com/digitalmyrddin/Dozory-magic/main/userscripts/Recast.user.js) |
 | **HotKeys** | Горячие клавиши для заклинаний в быту. | [Установить](https://raw.githubusercontent.com/digitalmyrddin/Dozory-magic/main/userscripts/HotKeys.user.js) |
 | **ReflexHotKeys** | Переключение рефлекса в быту по горячей клавише. | [Установить](https://raw.githubusercontent.com/digitalmyrddin/Dozory-magic/main/userscripts/ReflexHotKeys.user.js) |
 
 ### Детали
+
+— **DuelTimer**:
+Автоматически отслеживает дуэли, показывает таймер до повторного получения опыта и отображает статус соперников прямо в интерфейсе игры.
 
 — **FastTravel**:
 Быстрое перемещение между локация. Левый клик мышью по карте позволяет мгновенно перейти в локацию последним выбранным способом. Правый клик мышью - открывает родное окно выбора способа передвижения \ транспорта.
