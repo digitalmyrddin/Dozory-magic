@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Дозоры — Таймер дуэлей
 // @namespace    http://dozory.ru/
-// @version      3.2
+// @version      3.3
 // @description  Запоминает проведённые дуэли и показывает таймер до следующей возможности получить опыт.
 // @author       White Witcher & Claude
 // @include      http://game.dozory.ru/cgi-bin/main.cgi*
@@ -351,10 +351,19 @@ if (IS_COMPETITORS) {
       document.head.appendChild(st);
     }
 
+function saveMyIdFromAction() {
+      if (localStorage.getItem(MY_ID_KEY)) return;
+      var links = document.querySelectorAll('a[href*="profiles.cgi?id="]');
+      for (var i = 0; i < links.length; i++) {
+        var m = (links[i].getAttribute('href') || '').match(/id=(\d+)/);
+        if (m) { localStorage.setItem(MY_ID_KEY, m[1]); return; }
+      }
+    }
+
     window.addEventListener('load', function() {
-      setTimeout(function() { injectStyles(); buildPanel(); }, 300);
+      setTimeout(function() { saveMyIdFromAction(); injectStyles(); buildPanel(); }, 300);
     });
-    if (document.readyState === 'complete') setTimeout(function() { injectStyles(); buildPanel(); }, 300);
+    if (document.readyState === 'complete') setTimeout(function() { saveMyIdFromAction(); injectStyles(); buildPanel(); }, 300);
   }
 
   if (IS_COMPETITORS) {
