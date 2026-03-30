@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Дозоры — Таймер дуэлей
 // @namespace    http://dozory.ru/
-// @version      3.3
+// @version      3.4
 // @description  Запоминает проведённые дуэли и показывает таймер до следующей возможности получить опыт.
 // @author       White Witcher & Claude
 // @include      http://game.dozory.ru/cgi-bin/main.cgi*
@@ -13,13 +13,11 @@
 
 (function () {
   'use strict';
-
   var STORAGE_KEY  = 'doz_duel_log';
   var NAME_CACHE   = 'doz_name_cache';
   var MY_ID_KEY    = 'doz_my_id';
   var COOLDOWN_MS  = (24 * 60 + 10) * 60 * 1000;
-  var CACHE_TTL    = 48 * 60 * 60 * 1000; // 48 часов
-
+  var CACHE_TTL    = 48 * 60 * 60 * 1000; 
   var loc  = window.location.href;
   var IS_ACTION      = window.name === 'action';
   var IS_STRING      = window.name === 'string';
@@ -71,45 +69,27 @@
   function getNameFromCache(id) {
     var raw = loadNameCache();
     if (!raw[id]) return null;
-    return raw[id].n || raw[id]; 
+    return raw[id].n || raw[id];
   }
 
   if (IS_PREPARE) {
     var sessionMatch = loc.match(/session=(\d+)_(\d+)/);
     if (!sessionMatch) return;
-
     var idA = sessionMatch[1];
     var idB = sessionMatch[2];
 
     function getMyId() {
-      var saved = localStorage.getItem(MY_ID_KEY);
-      if (saved) return saved;
-      try {
-        var frames = window.opener && window.opener.frames;
-        if (frames) {
-          for (var i = 0; i < frames.length; i++) {
-            try {
-              var link = frames[i].document &&
-                         frames[i].document.querySelector('a[href*="profiles.cgi?id="]');
-              if (link) {
-                var m = (link.getAttribute('href') || '').match(/id=(\d+)/);
-                if (m) { localStorage.setItem(MY_ID_KEY, m[1]); return m[1]; }
-              }
-            } catch(e2) {}
-          }
-        }
-      } catch(e) {}
-      return null;
+      return localStorage.getItem(MY_ID_KEY) || null;
     }
-
     function getOppId(myId) {
       if (!myId) return loc.indexOf('rm=check') !== -1 ? idA : idB;
       return (idA === myId) ? idB : idA;
     }
-
     function getOppName(oppId) {
+
       var cached = getNameFromCache(oppId);
       if (cached) return cached;
+
       var spans = document.querySelectorAll('span[style*="font-weight"]');
       for (var i = 0; i < spans.length; i++) {
         var t = spans[i].textContent.trim();
@@ -117,7 +97,6 @@
       }
       return null;
     }
-
     function recordDuel(oppId) {
       var name = getOppName(oppId) || ('ID ' + oppId);
       var log = cleanOld(loadLog());
@@ -126,7 +105,6 @@
       log[oppId] = { name: name, time: Date.now() };
       saveLog(log);
     }
-
     function waitForAccepted(oppId) {
       if ((document.body.textContent || '').indexOf('Поздравляем') !== -1) {
         recordDuel(oppId); return;
@@ -142,15 +120,12 @@
         childList: true, subtree: true, characterData: true
       });
     }
-
     window.addEventListener('load', function() {
       var myId = getMyId();
-      if (myId) localStorage.setItem(MY_ID_KEY, myId);
       waitForAccepted(getOppId(myId));
     });
     return;
   }
-
   if (!IS_ACTION && !IS_STRING && !IS_COMPETITORS) return;
 
   function decorateVisibleTooltips() {
@@ -172,11 +147,9 @@
         if (!m) return;
         if (link.querySelector('.doz-duel-badge')) return;
         var targetId = String(m[1]);
-
         var badge = document.createElement('span');
         badge.className = 'doz-duel-badge';
         badge.style.cssText = 'margin-left:6px;font-size:10px;font-weight:bold;vertical-align:middle;';
-
         var e = loadLog()[targetId];
         if (!e) {
           badge.textContent = '● новый'; badge.style.color = '#8888bb';
@@ -194,12 +167,11 @@
       });
     });
   }
+  if (IS_COMPETITORS) {
+    setInterval(decorateVisibleTooltips, 500);
+  }
 
-if (IS_COMPETITORS) {
-  setInterval(decorateVisibleTooltips, 500);
-}
   if (IS_ACTION) {
-
     window.doz_duel_openPanel = function() {
       var panel = document.getElementById('doz-duel-panel');
       if (!panel) { buildPanel(); panel = document.getElementById('doz-duel-panel'); }
@@ -209,22 +181,18 @@ if (IS_COMPETITORS) {
         panel.style.display = 'none';
       }
     };
-
     function buildPanel() {
       injectStyles();
       var p = document.createElement('div');
       p.id = 'doz-duel-panel';
       document.body.appendChild(p);
     }
-
     function renderPanel(panel) {
       var log = cleanOld(loadLog()); saveLog(log);
       var now = Date.now();
       var ids = Object.keys(log).sort(function(a,b){ return log[b].time - log[a].time; });
-
       var html = '<div class="doz-duel-header"><b>⚔️ Дуэли | Таймеры опыта</b>' +
                  '<span class="doz-duel-close">✕</span></div>';
-
       if (ids.length === 0) {
         html += '<div style="padding:12px;color:#556;text-align:center;">Дуэлей пока не было</div>';
       } else {
@@ -245,7 +213,6 @@ if (IS_COMPETITORS) {
                   '</div>';
         });
       }
-
       html += '<div class="doz-duel-footer">' +
               '<div class="doz-duel-hint">Добавить вручную:</div>' +
               '<div style="display:flex;gap:4px;margin-bottom:4px;">' +
@@ -262,13 +229,10 @@ if (IS_COMPETITORS) {
               '<div style="text-align:right;">' +
               '<span id="doz-duel-clear-btn" style="cursor:pointer;color:#446;font-size:10px;">очистить историю</span>' +
               '</div></div>';
-
       panel.innerHTML = html;
-
       panel.querySelector('.doz-duel-close').addEventListener('click', function() {
         panel.style.display = 'none';
       });
-
       panel.querySelectorAll('[data-delid]').forEach(function(btn) {
         btn.addEventListener('click', function(e) {
           e.stopPropagation();
@@ -276,7 +240,6 @@ if (IS_COMPETITORS) {
           renderPanel(panel);
         });
       });
-
       panel.querySelector('#doz-duel-add-btn').addEventListener('click', function() {
         var id   = (panel.querySelector('#doz-duel-add-id').value || '').trim();
         var name = (panel.querySelector('#doz-duel-add-name').value || '').trim();
@@ -299,13 +262,11 @@ if (IS_COMPETITORS) {
         saveLog(log3);
         renderPanel(panel);
       });
-
       panel.querySelector('#doz-duel-clear-btn').addEventListener('click', function() {
         localStorage.removeItem(STORAGE_KEY);
         renderPanel(panel);
       });
     }
-
     function injectStyles() {
       if (document.getElementById('doz-duel-style')) return;
       var st = document.createElement('style');
@@ -350,37 +311,25 @@ if (IS_COMPETITORS) {
       ].join('\n');
       document.head.appendChild(st);
     }
-
-function saveMyIdFromAction() {
-      if (localStorage.getItem(MY_ID_KEY)) return;
-      var links = document.querySelectorAll('a[href*="profiles.cgi?id="]');
-      for (var i = 0; i < links.length; i++) {
-        var m = (links[i].getAttribute('href') || '').match(/id=(\d+)/);
+    window.addEventListener('load', function() {
+      setTimeout(function() { injectStyles(); buildPanel(); }, 300);
+    });
+    if (document.readyState === 'complete') setTimeout(function() { injectStyles(); buildPanel(); }, 300);
+  }
+  if (IS_COMPETITORS) {
+    function saveMyId() {
+      if (localStorage.getItem(MY_ID_KEY)) return; 
+      var myEmo = document.getElementById('my_emo');
+      if (myEmo) {
+        var onmouse = myEmo.getAttribute('onmouseover') || '';
+        var m = onmouse.match(/person_id\s*:\s*(\d+)/);
         if (m) { localStorage.setItem(MY_ID_KEY, m[1]); return; }
       }
     }
-
-    window.addEventListener('load', function() {
-      setTimeout(function() { saveMyIdFromAction(); injectStyles(); buildPanel(); }, 300);
-    });
-    if (document.readyState === 'complete') setTimeout(function() { saveMyIdFromAction(); injectStyles(); buildPanel(); }, 300);
-  }
-
-  if (IS_COMPETITORS) {
-
-    function saveMyId() {
-      var firstLink = document.querySelector('a[href*="profiles.cgi?id="]');
-      if (firstLink) {
-        var m = (firstLink.getAttribute('href') || '').match(/id=(\d+)/);
-        if (m) localStorage.setItem(MY_ID_KEY, m[1]);
-      }
-    }
-
     function injectCompetitorsBtn() {
       if (document.getElementById('doz-duel-compbtn')) return;
-      var orgBtn = document.querySelector('img[src*="org.gif"], img[src*="org_a.gif"]')
+      var orgBtn = document.querySelector('img[src*="org.gif"], img[src*="org_a.gif"]');
       if (!orgBtn) return;
-
       var sz = 21;
       var btn = document.createElement('div');
       btn.id = 'doz-duel-compbtn';
@@ -393,12 +342,10 @@ function saveMyIdFromAction() {
         'box-shadow:inset 0 1px 0 rgba(255,255,255,.15),0 1px 2px rgba(0,0,0,.5)',
         'box-sizing:border-box', 'overflow:hidden',
       ].join(';');
-
       var icon = document.createElement('img');
       icon.src = 'http://st.dozory.ru/img/emo/i_e_duel.gif';
       icon.style.cssText = 'border:0;display:block;max-width:' + (sz-4) + 'px;max-height:' + (sz-4) + 'px;';
       btn.appendChild(icon);
-
       function openPanel() {
         try {
           var af = window.top && window.top.frames && window.top.frames['action'];
@@ -409,7 +356,6 @@ function saveMyIdFromAction() {
       btn.addEventListener('mouseout',  function(){ btn.style.background='linear-gradient(to bottom,#5a5a7a,#2a2a4a)'; });
       btn.addEventListener('click', function(e){ e.stopPropagation(); openPanel(); });
       icon.addEventListener('click', function(e){ e.stopPropagation(); openPanel(); });
-
       var td = orgBtn.parentElement;
       if (td && td.tagName === 'TD') {
         var newTd = td.cloneNode(false);
@@ -417,19 +363,16 @@ function saveMyIdFromAction() {
         td.parentNode.insertBefore(newTd, td.nextSibling);
       }
     }
-
     new MutationObserver(function() {
       if (document.querySelector('img[src*="org.gif"], img[src*="org_a.gif"]') && !document.getElementById('doz-duel-compbtn'))
         injectCompetitorsBtn();
       if (document.querySelector('a[href*="profiles.cgi?id="]')) saveMyId();
     }).observe(document.body || document.documentElement, { childList: true, subtree: true });
-
     window.addEventListener('load', function() {
       setTimeout(function() { injectCompetitorsBtn(); saveMyId(); }, 200);
     });
     if (document.readyState === 'complete') setTimeout(function() { injectCompetitorsBtn(); saveMyId(); }, 200);
   }
-
   if (IS_STRING) {
     function injectStringBtn() {
       if (document.getElementById('doz-duel-footerbtn')) return;
@@ -469,5 +412,4 @@ function saveMyIdFromAction() {
     window.addEventListener('load', function() { setTimeout(injectStringBtn, 1800); });
     if (document.readyState === 'complete') setTimeout(injectStringBtn, 1800);
   }
-
 })();
