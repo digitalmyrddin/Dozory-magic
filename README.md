@@ -12,7 +12,7 @@
 
 ## 🔧Плагины для игры
 
-Для установки плагинов нужно установить расширение [Greasemonkey в FireFox](https://addons.mozilla.org/firefox/addon/greasemonkey/) \ [Tampermonkey в PaleMoon](https://github.com/janekptacijarabaci/greasemonkey/releases/download/3.31.4Fork/greasemonkey-3.31.4-pm_forkBranch.xpi) или [Tampermonkey в Chrome](https://chromewebstore.google.com/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo?hl=en). 
+Для установки плагинов нужно установить расширение [TamperMonkey в FireFox](https://addons.mozilla.org/en-US/firefox/addon/tampermonkey/) \ [GreaseMonkey в PaleMoon](https://github.com/janekptacijarabaci/greasemonkey/releases/download/3.31.4Fork/greasemonkey-3.31.4-pm_forkBranch.xpi) или [Tampermonkey в Chrome](https://chromewebstore.google.com/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo?hl=en). 
 После установки расширения - нажмите на ссылку скрипта и браузер предложит установку автоматически.
 
 | Скрипт | Описание | Установить |
@@ -44,7 +44,7 @@
 
 ---
 
-Проверено на Firefox + Greasemonkey и PaleMoon + Tampermonkey. 
+Проверено на Firefox + TamperMonkey и PaleMoon + GreaseMonkey. 
 
 Игра: [game.dozory.ru](http://game.dozory.ru)
 
