@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Дозоры — Таймер дуэлей
 // @namespace    http://dozory.ru/
-// @version      3.4
+// @version      4.0
 // @description  Запоминает проведённые дуэли и показывает таймер до следующей возможности получить опыт.
 // @author       White Witcher & Claude
 // @include      http://game.dozory.ru/cgi-bin/main.cgi*
@@ -73,29 +73,55 @@
   }
 
   if (IS_PREPARE) {
-    var sessionMatch = loc.match(/session=(\d+)_(\d+)/);
+
+    var sessionMatch = loc.match(/[?&]session=([^_&]+)_([^&]+)/);
     if (!sessionMatch) return;
+
     var idA = sessionMatch[1];
     var idB = sessionMatch[2];
 
     function getMyId() {
       return localStorage.getItem(MY_ID_KEY) || null;
     }
+
     function getOppId(myId) {
-      if (!myId) return loc.indexOf('rm=check') !== -1 ? idA : idB;
-      return (idA === myId) ? idB : idA;
+      var sMyId = String(myId || '').trim();
+
+      if (sMyId) {
+        if (idA === sMyId) return idB;
+        if (idB === sMyId) return idA;
+      }
+
+      return (loc.indexOf('rm=check') !== -1) ? idA : idB;
     }
+
     function getOppName(oppId) {
 
       var cached = getNameFromCache(oppId);
       if (cached) return cached;
 
-      var spans = document.querySelectorAll('span[style*="font-weight"]');
-      for (var i = 0; i < spans.length; i++) {
-        var t = spans[i].textContent.trim();
-        if (t && t.length > 1 && t.length < 40) return t;
+
+      var elements = document.querySelectorAll('b, span[style*="font-weight"], td');
+      var parts = [];
+
+      for (var i = 0; i < elements.length; i++) {
+        var txt = elements[i].textContent.trim();
+
+        if (!txt || txt.length < 2 || txt.length > 50 || /^\d+$/.test(txt)) continue;
+        if (txt.indexOf('Вы вызвали') !== -1 || txt.indexOf('Вам предлагают') !== -1) continue;
+
+        var clean = txt.replace(/\s*(вм|ин|абс|ор|свет|темн|сумм)\d*/gi, '').trim();
+        
+        if (clean && clean.length > 2 && !/^\d+$/.test(clean)) {
+
+          if (elements[i].tagName === 'B' || elements[i].style.fontWeight === 'bold' || elements[i].style.fontWeight > 500) {
+             return clean; 
+          }
+          parts.push(clean);
+        }
       }
-      return null;
+
+      return parts[0] || null;
     }
     function recordDuel(oppId) {
       var name = getOppName(oppId) || ('ID ' + oppId);
@@ -120,10 +146,28 @@
         childList: true, subtree: true, characterData: true
       });
     }
-    window.addEventListener('load', function() {
-      var myId = getMyId();
-      waitForAccepted(getOppId(myId));
-    });
+  window.addEventListener('load', function() {
+    var myId = getMyId();
+    var oppId = getOppId(myId);
+
+    var nameNow = getOppName(oppId);
+    if (nameNow) saveNameToCache(oppId, nameNow);
+
+    setTimeout(function() {
+        var retryName = getOppName(oppId);
+        if (retryName) {
+            saveNameToCache(oppId, retryName);
+          
+            var log = loadLog();
+            if (log[oppId] && log[oppId].name.indexOf('ID ') === 0) {
+                log[oppId].name = retryName;
+                saveLog(log);
+            }
+        }
+    }, 400);
+
+    waitForAccepted(oppId);
+});
     return;
   }
   if (!IS_ACTION && !IS_STRING && !IS_COMPETITORS) return;
@@ -205,11 +249,12 @@
           var d = new Date(e.time);
           var timeStr = d.getHours() + ':' + String(d.getMinutes()).padStart(2,'0');
           var profileUrl = 'http://profiles.dozory.ru/cgi-bin/profiles.cgi?id=' + id;
-          html += '<div class="doz-duel-row">' +
-                  '<a class="doz-duel-name" href="' + profileUrl + '" target="_blank">' + escHtml(e.name) + '</a>' +
+       html += '<div class="doz-duel-row">' +
+                  '<a class="doz-duel-name" href="http://profiles.dozory.ru/cgi-bin/profiles.cgi?id=' + id + '" target="_blank">' + escHtml(e.name) + '</a>' +
                   '<span class="doz-duel-time">' + timeStr + '</span>' +
-                  '<span style="color:' + color + ';font-weight:bold;">' + status + '</span>' +
-                  '<span class="doz-duel-del" data-delid="' + id + '" title="Удалить">✕</span>' +
+                  '<span style="color:' + color + ';font-weight:bold;margin-right:5px;">' + status + '</span>' +
+                  '<span class="doz-duel-edit" data-editid="' + id + '" title="Редактировать" style="cursor:pointer;margin-right:6px;opacity:0.4;font-size:12px;">✎</span>' +
+                  '<span class="doz-duel-del" data-delid="' + id + '" title="Удалить" style="cursor:pointer;opacity:0.4;font-size:12px;">❌︎</span>' +
                   '</div>';
         });
       }
@@ -240,14 +285,18 @@
           renderPanel(panel);
         });
       });
-      panel.querySelector('#doz-duel-add-btn').addEventListener('click', function() {
+    panel.querySelector('#doz-duel-add-btn').onclick = function() {
+        var btn = this;
         var id   = (panel.querySelector('#doz-duel-add-id').value || '').trim();
         var name = (panel.querySelector('#doz-duel-add-name').value || '').trim();
+        
         if (!id || !name || !/^\d+$/.test(id)) return;
+        
         var timeStr = (panel.querySelector('#doz-duel-add-time').value || '').trim();
         var day     = panel.querySelector('#doz-duel-add-day').value;
         var ts = Date.now();
         var tm = timeStr.match(/^(\d{1,2}):(\d{2})$/);
+        
         if (tm) {
           var now2 = new Date();
           var d2 = new Date(now2.getFullYear(), now2.getMonth(), now2.getDate(),
@@ -257,14 +306,50 @@
         } else if (day === 'yesterday') {
           ts = Date.now() - 24 * 60 * 60 * 1000;
         }
+
         var log3 = loadLog();
+        var oldId = btn.getAttribute('data-old-id');
+
+        if (oldId && oldId !== id) {
+          delete log3[oldId];
+        }
+
         log3[id] = { name: name, time: ts };
+        
+        btn.removeAttribute('data-old-id');
+        btn.textContent = '+ Добавить';
+        btn.classList.remove('doz-duel-btn-edit-mode');
+
         saveLog(log3);
         renderPanel(panel);
-      });
-      panel.querySelector('#doz-duel-clear-btn').addEventListener('click', function() {
-        localStorage.removeItem(STORAGE_KEY);
-        renderPanel(panel);
+      };
+
+      panel.querySelector('#doz-duel-clear-btn').onclick = function() {
+        if (confirm('Очистить историю дуэлей?')) {
+          localStorage.removeItem(STORAGE_KEY);
+          renderPanel(panel);
+        }
+      };
+
+      panel.querySelectorAll('[data-editid]').forEach(function(btn) {
+        btn.onclick = function(e) {
+          e.stopPropagation();
+          var editId = btn.getAttribute('data-editid');
+          var entry = loadLog()[editId];
+          if (entry) {
+            panel.querySelector('#doz-duel-add-id').value = editId;
+            panel.querySelector('#doz-duel-add-name').value = entry.name;
+            var d = new Date(entry.time);
+            panel.querySelector('#doz-duel-add-time').value = d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
+
+            var sBtn = panel.querySelector('#doz-duel-add-btn');
+            if (sBtn) {
+              sBtn.textContent = '💾 Сохранить';
+              sBtn.setAttribute('data-old-id', editId); 
+              sBtn.classList.add('doz-duel-btn-edit-mode');
+            }
+          }
+        };
       });
     }
     function injectStyles() {
@@ -308,6 +393,11 @@
         '  border-radius:3px; color:#bb99ee; cursor:pointer; font:11px Arial;',
         '}',
         '.doz-duel-btn:hover { background:#3a2a5a; }',
+        '.doz-duel-edit { cursor:pointer; margin-right:8px; opacity:0.5; transition: opacity 0.2s, color 0.2s; font-size:14px; }',
+        '.doz-duel-edit:hover { opacity:1; color:#bb99ee; }',
+        '.doz-duel-btn { transition: background 0.3s, transform 0.1s; }',
+        '.doz-duel-btn:active { transform: scale(0.95); }',
+        '.doz-duel-btn-edit-mode { background: #4a3a7a !important; box-shadow: 0 0 10px #6a5a9a; border-color: #bb99ee !important; }'
       ].join('\n');
       document.head.appendChild(st);
     }
@@ -317,15 +407,31 @@
     if (document.readyState === 'complete') setTimeout(function() { injectStyles(); buildPanel(); }, 300);
   }
   if (IS_COMPETITORS) {
-    function saveMyId() {
-      if (localStorage.getItem(MY_ID_KEY)) return; 
+function saveMyId() {
       var myEmo = document.getElementById('my_emo');
       if (myEmo) {
-        var onmouse = myEmo.getAttribute('onmouseover') || '';
-        var m = onmouse.match(/person_id\s*:\s*(\d+)/);
-        if (m) { localStorage.setItem(MY_ID_KEY, m[1]); return; }
+        var m = (myEmo.getAttribute('onmouseover') || '').match(/person_id\s*:\s*(\d+)/);
+        if (m) {
+          var newId = m[1];
+          if (localStorage.getItem(MY_ID_KEY) !== newId) {
+            localStorage.setItem(MY_ID_KEY, newId);
+          }
+        }
       }
     }
+
+    var obs = new MutationObserver(function() {
+      if (document.querySelector('img[src*="org.gif"], img[src*="org_a.gif"]') && !document.getElementById('doz-duel-compbtn')) {
+        injectCompetitorsBtn();
+      }
+      saveMyId();
+    });
+    obs.observe(document.body || document.documentElement, { childList: true, subtree: true });
+
+    setInterval(saveMyId, 2000);
+
+    saveMyId();
+    injectCompetitorsBtn();
     function injectCompetitorsBtn() {
       if (document.getElementById('doz-duel-compbtn')) return;
       var orgBtn = document.querySelector('img[src*="org.gif"], img[src*="org_a.gif"]');
